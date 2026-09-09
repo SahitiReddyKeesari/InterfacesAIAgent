@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260909T230148-2b0f1b",
+  "kind": "replay",
+  "outcome": "business_outcome",
+  "duration_ms": 3538,
+  "events": 10,
+  "summary": "business outcome 'member_not_found': No member matches the supplied number. A legitimate answer for the caller, not a failure of the automation.",
+  "weak_steps": []
+}

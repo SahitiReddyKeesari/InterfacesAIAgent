@@ -216,7 +216,17 @@ class DiscoveryAgent:
         checkpoint = self._checkpoint(decision.get("checkpoint_text"), intent)
 
         if kind == "fill":
-            action = Fill(locator=locator, text=text or "")
+            literal = text or ""
+            if element.max_length and len(literal) > element.max_length:
+                # The browser would truncate this silently and the flow would proceed
+                # with a value nobody chose - which is exactly how a real run typed a
+                # model's deliberations into a member-number field.
+                self._log("value_rejected",
+                          f"value of {len(literal)} chars exceeds the "
+                          f"{element.max_length}-char field",
+                          field=element.label_text or element.name)
+                return None
+            action = Fill(locator=locator, text=literal)
         elif kind == "select":
             action = Select(locator=locator, option=text or "")
         elif kind == "click":

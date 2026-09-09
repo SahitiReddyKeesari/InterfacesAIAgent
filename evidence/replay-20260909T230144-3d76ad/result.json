@@ -1,0 +1,95 @@
+{
+  "outcome": "success",
+  "capability_id": "meridian.read_account_balance",
+  "version": 1,
+  "fingerprint": "beb20adef9f98114",
+  "outputs": {
+    "member_name": "Maeve Millay",
+    "balance": "25000.00",
+    "account_status": "Matured"
+  },
+  "business_outcome": null,
+  "business_detail": "",
+  "recoveries": [],
+  "escalations": [],
+  "human_changes": [],
+  "failed_step": null,
+  "expected": "",
+  "observed": "",
+  "error": "",
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the servicing application.",
+      "action": "navigate",
+      "ok": true,
+      "strategy": null,
+      "confidence": 0.0,
+      "checkpoint_passed": null,
+      "detail": "navigated to http://127.0.0.1:8080/meridian/"
+    },
+    {
+      "index": 1,
+      "intent": "Enter the member number to search for.",
+      "action": "fill",
+      "ok": true,
+      "strategy": "label_text",
+      "confidence": 0.85,
+      "checkpoint_passed": null,
+      "detail": "fill via label_text"
+    },
+    {
+      "index": 2,
+      "intent": "Run the member search.",
+      "action": "click",
+      "ok": true,
+      "strategy": "role_name",
+      "confidence": 0.92,
+      "checkpoint_passed": true,
+      "detail": "click via role_name"
+    },
+    {
+      "index": 3,
+      "intent": "Open the matching member's record.",
+      "action": "click",
+      "ok": true,
+      "strategy": "role_name",
+      "confidence": 0.92,
+      "checkpoint_passed": true,
+      "detail": "click via role_name"
+    },
+    {
+      "index": 4,
+      "intent": "Read the member's name for the caller.",
+      "action": "read",
+      "ok": true,
+      "strategy": "label_text",
+      "confidence": 0.85,
+      "checkpoint_passed": null,
+      "detail": ""
+    },
+    {
+      "index": 5,
+      "intent": "Read the balance of the requested account.",
+      "action": "read",
+      "ok": true,
+      "strategy": "column_cell",
+      "confidence": 0.88,
+      "checkpoint_passed": null,
+      "detail": ""
+    },
+    {
+      "index": 6,
+      "intent": "Read the status of the requested account.",
+      "action": "read",
+      "ok": true,
+      "strategy": "column_cell",
+      "confidence": 0.88,
+      "checkpoint_passed": null,
+      "detail": ""
+    }
+  ],
+  "run_id": "replay-20260909T230144-3d76ad",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260909T230144-3d76ad",
+  "duration_ms": 4270
+}

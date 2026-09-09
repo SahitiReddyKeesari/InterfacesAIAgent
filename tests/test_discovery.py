@@ -253,3 +253,27 @@ def test_an_unrecognised_parameter_name_falls_back_to_the_literal(agent_for, bas
     capability = agent.run(config(base_url))
     fill = next(s for s in capability.steps if s.action.kind == "fill")
     assert fill.action.text == "{member_id}"   # the literal still gets parameterised
+
+
+def test_a_value_too_long_for_the_field_is_refused(agent_for, base_url, srv):
+    """A real run typed a thousand characters of model deliberation into a 32-character
+    member field; the browser truncated it and the search matched nothing. A value the
+    control cannot hold is a wrong value, not something to type anyway."""
+    script = [{"reasoning": "type a novel", "action": "fill",
+               "target": "Member / Name:", "parameter": "none",
+               "text": "x" * 400}] + HAPPY
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    # The oversized step was dropped, and the run still completed via the good ones.
+    assert all(getattr(s.action, "text", "") != "x" * 400 for s in capability.steps)
+    assert capability.validate_contract() == []
+
+
+def test_field_capacity_is_perceived(surface, base_url):
+    """maxlength is part of what a control is - the loop cannot respect a limit it
+    cannot see."""
+    from cua.surfaces.models import Navigate, Role
+    surface.act(Navigate(url=base_url + "/meridian/"))
+    field = next(e for e in surface.observe().elements
+                 if e.role is Role.TEXTBOX and (e.label_text or "").startswith("Member"))
+    assert field.max_length == 32

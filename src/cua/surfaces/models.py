@@ -104,6 +104,7 @@ class Element(BaseModel):
     value: str | None = None
     label_text: str | None = None
     column_header: str | None = None
+    max_length: int | None = None     # what the control will actually accept
     control_id: str | None = None
     text: str | None = None
     enabled: bool = True

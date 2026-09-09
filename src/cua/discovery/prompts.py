@@ -32,11 +32,11 @@ without you. Prefer a heading or a label over a value that will differ next time
 - Classify each action's `risk`: `safe` if nothing persists (reading, typing, \
 navigating), `consequential` if it writes something that another flow could undo, \
 `irreversible` if it cannot be undone through this application.
-- To type a value the caller supplied, set `parameter` to its name. The exact value is \
-substituted for you - you never see it and must not guess, reformat, pad or zero-fill \
-it. Set `parameter` to "none" only when typing a literal you chose yourself.
-- `text` is the literal characters to type, and nothing else. Never put an explanation, \
-a note or a placeholder in it.
+- `parameter` is required on every action. To type a value the caller supplied, set it \
+to that parameter's name and set `text` to "". The value is substituted for you; you \
+never see it and must not guess, reformat or pad it.
+- For a literal you chose yourself, set `parameter` to "none" and put the literal - and \
+only the literal - in `text`.
 - Use `read` to extract a value the caller asked for, and give it a short snake_case \
 `output_name`.
 - Answer `done` when the goal is complete, and set `success_text` to a phrase that \
@@ -92,7 +92,7 @@ _DECISION_SCHEMA = {
                          "description": "On done: a phrase proving the goal was met."},
         "note": {"type": "string"},
     },
-    "required": ["reasoning", "action"],
+    "required": ["reasoning", "action", "parameter"],
 }
 
 MAX_LISTED = 60

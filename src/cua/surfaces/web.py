@@ -129,6 +129,7 @@ class PlaywrightSurface:
                     value=raw.get("value"),
                     label_text=raw.get("label_text") or None,
                     column_header=raw.get("column_header") or None,
+                    max_length=raw.get("max_length"),
                     control_id=raw.get("control_id") or None,
                     text=raw.get("text") or None,
                     enabled=bool(raw.get("enabled", True)),

@@ -88,11 +88,13 @@
       const t = (el.getAttribute('type') || 'text').toLowerCase();
       value = ['checkbox', 'radio'].includes(t) ? String(el.checked) : el.value;
     }
+    const declaredMax = parseInt(el.getAttribute('maxlength') || '', 10);
     out.push({
       role,
       name: accessibleName(el),
       value,
       label_text: captionFor(el),
+      max_length: Number.isFinite(declaredMax) && declaredMax > 0 ? declaredMax : null,
       control_id: el.id || el.getAttribute('name') || '',
       text: clean(el.textContent).slice(0, 120),
       enabled: !el.disabled,
