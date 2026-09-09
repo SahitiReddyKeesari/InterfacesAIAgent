@@ -1,0 +1,10 @@
+{% include 'summit/_chrome.html' %}
+<body>
+<table class="outer" width="100%" cellpadding="0" cellspacing="0"><tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td class="sect">Session Terminated</td></tr>
+    <tr><td>Inactivity timeout (SUM-3390). The transaction token is no longer valid.</td></tr>
+    <tr><td><a href="{{ url_for('summit.search') }}" class="b">Re-establish Session</a></td></tr>
+  </table>
+</td></tr></table>
+</body>

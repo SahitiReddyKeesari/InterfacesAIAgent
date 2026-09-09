@@ -1,0 +1,13 @@
+{% include 'summit/_chrome.html' %}
+<body>
+<table class="outer" width="100%" cellpadding="0" cellspacing="0"><tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td class="sect" colspan="2">Transaction Posted</td></tr>
+    <tr><td colspan="2"><b>Related account established.</b></td></tr>
+    <tr><td class="cap">Acct Nbr:</td><td><b>{{ acct.number }}</b></td></tr>
+    <tr><td class="cap">Product:</td><td>{{ acct.kind }}</td></tr>
+    <tr><td class="cap">Ledger Balance:</td><td>{{ '%.2f'|format(acct.balance) }}</td></tr>
+    <tr><td colspan="2"><a href="{{ url_for('summit.search') }}" class="b">Return to Lookup</a></td></tr>
+  </table>
+</td></tr></table>
+</body>

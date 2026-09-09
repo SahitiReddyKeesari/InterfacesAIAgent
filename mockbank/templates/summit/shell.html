@@ -1,0 +1,23 @@
+{% include 'summit/_chrome.html' %}
+<body>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td class="tbar">
+  SUMMIT SERVICING &nbsp;<font color="#c0d0b8">r7.2.14</font>
+  <font color="#c0d0b8" style="float:right">Teller: 4471 &nbsp;Office: 002</font>
+</td></tr></table>
+<table width="100%" cellpadding="0" cellspacing="0"><tr>
+  <td width="150" valign="top" style="background:#dfe4d8;padding:6px">
+    <table cellpadding="0" cellspacing="0" width="100%">
+      <tr><td class="sect">Customer</td></tr>
+      <tr><td><a href="{{ url_for('summit.search') }}" target="workspace">Customer Lookup</a></td></tr>
+      <tr><td><a href="#">Relationship Summary</a></td></tr>
+      <tr><td class="sect">Operations</td></tr>
+      <tr><td><a href="#">Batch Journal</a></td></tr>
+      <tr><td><a href="#">Office Totals</a></td></tr>
+    </table>
+  </td>
+  <td valign="top" style="padding:6px">
+    <iframe name="workspace" id="workspace" src="{{ url_for('summit.search') }}"
+            width="100%" height="560" frameborder="0"></iframe>
+  </td>
+</tr></table>
+</body>

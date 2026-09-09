@@ -1,0 +1,16 @@
+{% include 'webforms/_chrome.html' %}
+<body>
+<form name="aspnetForm" method="post" action="{{ url_for('webforms.signon') }}" id="aspnetForm">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:6px">
+<table class="pnl" cellpadding="0" cellspacing="0">
+  <tr><td class="hdr" colspan="2">Operator Sign On</td></tr>
+  <tr><td class="lbl">Operator ID:</td>
+      <td class="fld"><input type="text" name="ctl00$txtOperator" id="ctl00_txtOperator" value="MTHOMPSON"></td></tr>
+  <tr><td class="lbl">Password:</td>
+      <td class="fld"><input type="password" name="ctl00$txtPassword" id="ctl00_txtPassword"></td></tr>
+  <tr><td colspan="2" class="fld">
+      <input type="submit" name="ctl00$btnSignOn" value="Sign On" id="ctl00_btnSignOn" class="btn"></td></tr>
+</table>
+</td></tr></table>
+</form>
+</body>

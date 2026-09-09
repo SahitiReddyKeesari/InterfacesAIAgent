@@ -1,0 +1,11 @@
+<html>
+<head><title>Meridian Core Servicing</title></head>
+<frameset rows="52,*" border="1" frameborder="1">
+  <frame name="banner" src="{{ url_for('webforms.banner') }}" scrolling="no" noresize>
+  <frameset cols="168,*">
+    <frame name="nav" src="{{ url_for('webforms.nav') }}" scrolling="no">
+    <frame name="main" src="{{ url_for('webforms.main') }}">
+  </frameset>
+</frameset>
+<noframes><body>This application requires frame support.</body></noframes>
+</html>
