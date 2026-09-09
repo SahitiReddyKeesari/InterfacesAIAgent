@@ -155,3 +155,61 @@ def test_identical_code_drives_both_dialects(surface, base_url, path, caption,
     btn = next(e for e in obs.elements if e.role is role and e.name == button)
     assert surface.act(Click(locator=locators.build(btn))).ok
     assert expect in surface.observe().text_digest
+
+
+# ------------------------------------------------- framework-agnostic locators
+@pytest.mark.parametrize("ids,label", [
+    (["a$ctl02$lnk", "a$ctl03$lnk", "a$ctl04$lnk"], "ASP.NET WebForms"),
+    (["row_3_select", "row_4_select"], "Struts-style"),
+    (["form:tbl:0:btn", "form:tbl:1:btn"], "JSF-style"),
+    (["grid[7]open", "grid[8]open"], "bracket-indexed"),
+])
+def test_positional_ids_are_detected_regardless_of_framework(ids, label):
+    """Detection is structural - peers sharing an id shape mean the digits are an
+    index - so it is not tied to one vendor's naming convention."""
+    peers = [Element(ref=f"r{i}", role=Role.LINK, name="Open", control_id=c)
+             for i, c in enumerate(ids)]
+    loc = locators.build(peers[0], peers=peers)
+    control_id = next(c for c in loc.candidates if c.strategy is Strategy.CONTROL_ID)
+    assert control_id.confidence < 0.5, f"{label} index not detected"
+    assert loc.candidates[0].strategy is not Strategy.CONTROL_ID
+
+
+def test_genuinely_named_ids_keep_their_confidence():
+    """The detector must not cry wolf on ids that merely happen to be generated."""
+    peers = [Element(ref="a", role=Role.TEXTBOX, control_id="customerNbr"),
+             Element(ref="b", role=Role.TEXTBOX, control_id="openingAmt")]
+    loc = locators.build(peers[0], peers=peers)
+    control_id = next(c for c in loc.candidates if c.strategy is Strategy.CONTROL_ID)
+    assert control_id.confidence == 0.7
+
+
+def test_peers_can_clear_an_id_that_merely_looks_indexed():
+    """A lone id containing digits is suspected; peers that disagree exonerate it."""
+    suspect = Element(ref="a", role=Role.TEXTBOX, control_id="address1")
+    alone = next(c for c in locators.build(suspect).candidates
+                 if c.strategy is Strategy.CONTROL_ID)
+    with_peers = next(c for c in locators.build(
+        suspect, peers=[suspect, Element(ref="b", role=Role.TEXTBOX,
+                                         control_id="postcode")]).candidates
+        if c.strategy is Strategy.CONTROL_ID)
+    assert alone.confidence < with_peers.confidence
+
+
+def test_row_scoping_works_without_a_table(surface, tmp_path):
+    """Scoping must not assume <tr>: a div or list based surface has records too."""
+    page = tmp_path / "list.html"
+    page.write_text("""
+      <ul>
+        <li><span>PX-9931</span><span>Adrian Vela</span><button type=button>Open</button></li>
+        <li><span>PX-9932</span><span>Rosa Imani</span><button type=button>Open</button></li>
+      </ul>""")
+    surface.act(Navigate(url=page.as_uri()))
+    obs = surface.observe()
+    opn = next(e for e in obs.elements if e.role is Role.BUTTON and e.name == "Open")
+
+    for key, expected in [("PX-9931", "Adrian Vela"), ("PX-9932", "Rosa Imani")]:
+        loc = locators.build(opn, scope=locators.row_scope(key), peers=obs.elements)
+        assert surface.resolve(loc).resolved
+        row = surface._scoped(surface._frame_for(loc.frame_path), loc)
+        assert expected in row.inner_text()

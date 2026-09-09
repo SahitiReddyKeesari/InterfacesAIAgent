@@ -3,9 +3,9 @@
 Two things here are specific to the environment this targets rather than to browsers in
 general, and both are the reason the seam exists:
 
-  * Frames. The flow does not live in the top-level document - Meridian is a frameset
-    and Summit uses an iframe workspace. Every element carries the frame path it was
-    found in, and acting resolves back into that frame.
+  * Frames. The flow often does not live in the top-level document: legacy apps use
+    framesets, and newer ones embed a workspace in an iframe. Every element carries the
+    frame path it was found in, and acting resolves back into that frame.
   * Caption-based targeting. These pages have no test ids and no <label for>, so a
     field is identified by the caption in the neighbouring cell. That has a direct
     analogue on a desktop surface (the static text preceding a control), which is what
@@ -207,32 +207,48 @@ class PlaywrightSurface:
             self._page.wait_for_timeout(50)
 
     # ----------------------------------------------------------------- resolve
-    def _scoped(self, frame: Frame, locator: Locator):
-        """Root to search under - the whole frame, or one grid row.
+    # Containers that repeat one record. Ordered most-specific first: a semantic
+    # container is a better scope than a generic block, but a surface that uses neither
+    # (a div-based list, a desktop pane) still has to work - which the earlier
+    # tr-only version did not.
+    _SCOPE_TIERS = (
+        "tr, [role=row], li, [role=listitem]",
+        "fieldset, article, section, td, div",
+    )
 
-        Picking `.first` here is wrong on exactly the markup this targets. These layouts
-        nest tables inside tables, so an outer layout row also "contains" the text and
-        matches first, silently widening the scope back to the entire grid - which then
-        falls through to a positional id and selects the wrong record. Choose the
-        tightest match instead: the matching row that holds no further matching rows,
-        and among those the one with the least text.
+    def _scoped(self, frame: Frame, locator: Locator):
+        """Root to search under - the whole frame, or the one record containing the key.
+
+        Two subtleties, both learned the hard way on this markup:
+
+        * Layouts nest containers inside containers, so an outer element also "contains"
+          the text and would silently widen the scope back to the whole list - which
+          then falls through to a positional id and selects the wrong record. The
+          tightest match is the right one.
+        * A container that holds the text but not the control is not a scope at all
+          (a label cell matches "12347" without containing the Select link), so
+          candidates are filtered by whether they actually hold the target role.
         """
         if locator.scope is None:
             return frame.locator("body")
-        rows = frame.locator("tr").filter(has_text=locator.scope.contains_text)
-        n = rows.count()
-        if n == 0:
-            return None
-        best, best_key = None, None
-        for i in range(n):
-            row = rows.nth(i)
-            try:
-                key = (row.locator("tr").count(), len(row.inner_text()))
-            except Exception:
-                continue
-            if best_key is None or key < best_key:
-                best, best_key = row, key
-        return best
+
+        wanted = _ROLE_CSS.get(locator.role) if locator.role else None
+        for tier in self._SCOPE_TIERS:
+            rows = frame.locator(tier).filter(has_text=locator.scope.contains_text)
+            best, best_key = None, None
+            for i in range(min(rows.count(), 40)):
+                row = rows.nth(i)
+                try:
+                    if wanted and row.locator(wanted).count() == 0:
+                        continue
+                    key = (row.locator(tier).count(), len(row.inner_text()))
+                except Exception:
+                    continue
+                if best_key is None or key < best_key:
+                    best, best_key = row, key
+            if best is not None:
+                return best
+        return None
 
     def _try(self, root, candidate, role: Role | None = None) -> Any:
         strategy, value = candidate.strategy, candidate.value

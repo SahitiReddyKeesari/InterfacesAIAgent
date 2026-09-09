@@ -15,10 +15,16 @@ import re
 
 from .models import Candidate, Element, Locator, Role, Scope, Strategy
 
-# ASP.NET GridView-style ids embed the row index: ..._gvResults_ctl02_lnkSelect.
-# Those are positional by construction - the same link for a different row differs only
-# by the number - so they must never be trusted as a primary identifier.
-_POSITIONAL_ID = re.compile(r"(_ctl\d+_|\$ctl\d+\$)")
+# Generated ids are split on their separators and each segment judged on its own.
+# A segment that is all digits, or letters with trailing digits, is an index:
+# `ctl02`, `row_3`, `tbl:0:btn`, `item[2]`. Framework agnostic on purpose - an earlier
+# version matched only one vendor's convention, so any other framework's numbering was
+# silently trusted.
+_ID_SEPARATORS = re.compile(r"[_$\-\[\]:.]+")
+_INDEX_SEGMENT = re.compile(r"^(?:\d{1,4}|[A-Za-z]+\d{1,4})$")
+
+# Digits collapsed to a marker, so two ids that differ only by an index compare equal.
+_DIGITS = re.compile(r"\d+")
 
 _INPUT_ROLES = {Role.TEXTBOX, Role.COMBOBOX, Role.CHECKBOX, Role.RADIO}
 _READABLE_ROLES = {Role.TEXT, Role.CELL}
@@ -29,13 +35,64 @@ def _clean(s: str | None) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 
+def _id_shape(control_id: str) -> str:
+    """An id with every digit run collapsed, so `gv_ctl02_link` and `gv_ctl03_link`
+    share a shape."""
+    return _DIGITS.sub("#", control_id)
+
+
+def is_positional_id(element: Element, peers: list[Element] | None = None) -> tuple[bool, str]:
+    """Decide whether an id names a control or merely a slot.
+
+    Two signals, strongest first:
+
+    1. Structural, and authoritative when peers are available. If another control of
+       the same role in the same frame has an id of the same shape - identical once
+       digit runs are collapsed - then the digits are an index. This needs no knowledge
+       of the framework that generated them, which is the point: it catches ASP.NET's
+       `ctl02`, Struts' `row_3` and anything else that numbers repeated controls.
+
+    2. Shape alone, used when no peers were supplied. Weaker, because an id may
+       legitimately contain a number, so it is only a suspicion.
+    """
+    cid = _clean(element.control_id)
+    if not cid:
+        return False, ""
+    comparable = [p for p in (peers or [])
+                  if p is not element
+                  and p.role is element.role
+                  and p.frame_path == element.frame_path
+                  and p.control_id]
+    if comparable:
+        # Authoritative: with siblings to compare against, their agreement or
+        # disagreement settles it, and the weaker shape heuristic is not consulted.
+        shape = _id_shape(cid)
+        twins = [p for p in comparable
+                 if _id_shape(_clean(p.control_id)) == shape
+                 and _clean(p.control_id) != cid]
+        if twins:
+            return True, (f"another {len(twins) + 1} controls of this role share the id "
+                          f"shape {shape!r}, so the digits index a position rather than "
+                          f"name a control")
+        return False, ""
+    if any(_INDEX_SEGMENT.match(seg) for seg in _ID_SEPARATORS.split(cid) if seg):
+        return True, ("a segment of the id is an index; treated as positional until "
+                      "peers prove otherwise, which errs towards distrusting an id "
+                      "rather than towards selecting the wrong record")
+    return False, ""
+
+
 def build(element: Element, description: str | None = None,
-          scope: Scope | None = None) -> Locator:
+          scope: Scope | None = None,
+          peers: list[Element] | None = None) -> Locator:
     """Derive an ordered fallback chain for one element.
 
     Pass a `scope` when the control is one of many identical siblings - every row of a
     results grid has its own "Select" link, so the row must be pinned by its business
     key before the link can be identified at all.
+
+    Pass `peers` - the other elements of the same observation - to let generated ids be
+    judged structurally rather than by pattern-matching one framework's conventions.
     """
     candidates: list[Candidate] = []
     name = _clean(element.name)
@@ -88,14 +145,14 @@ def build(element: Element, description: str | None = None,
     # 3. Generated control id. Stable in WebForms while the control tree is stable -
     #    but worthless when it encodes a row index.
     if cid:
-        positional = bool(_POSITIONAL_ID.search(cid))
+        positional, why = is_positional_id(element, peers)
         candidates.append(Candidate(
             strategy=Strategy.CONTROL_ID,
             value=cid,
             confidence=0.35 if positional else 0.7,
             rationale=(
-                "generated id embeds a row index, so it identifies a position rather "
-                "than a control and breaks when the grid reorders"
+                f"identifies a position, not a control: {why}; it will select the wrong "
+                f"record as soon as the list reorders"
                 if positional else
                 "server-generated id, stable while the control tree is unchanged, but "
                 "opaque and not portable off this surface"
