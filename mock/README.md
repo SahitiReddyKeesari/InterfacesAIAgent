@@ -33,6 +33,51 @@ mkdir -p ~/.jdks && curl -sL "$(curl -s 'https://api.adoptium.net/v3/assets/late
 
 `run.sh` finds a JDK on `PATH`, in `JAVA_HOME`, or under `~/.jdks`.
 
+## Card Services
+
+`/meridian/cards.aspx` (nav: **Card Services**). Retrieve a member's cards, then act on one.
+
+| Action | From state | Reversible | Behaviour |
+|---|---|---|---|
+| Activate | `Inactive` | yes | applies immediately |
+| Lock | `Active` | yes | applies immediately |
+| Unlock | `Locked` | yes | applies immediately |
+| **Block** | any except `Blocked` | **no** | routes to a confirmation screen first |
+
+**Block is deliberately the risky action.** It is irreversible, there is no path back out
+of `Blocked`, and it is the only action gated behind an explicit confirmation step - the
+grid link opens a warning screen rather than firing the change. A blocked card offers no
+further actions in the UI, and forging the postback anyway returns a business outcome
+(`CRD-2210`), not a crash. That gives the automation a concrete risky/irreversible
+operation to classify and handle conservatively.
+
+Wrong-state and authorisation rejections are business outcomes with codes, not failures:
+
+| Code | Meaning |
+|---|---|
+| `CRD-2201` | card is not awaiting activation |
+| `CRD-2203` | only an active card can be locked |
+| `CRD-2204` | only a locked card can be unlocked |
+| `CRD-2210` | card is already blocked |
+| `CRD-2199` | card not found on this relationship |
+| `SEC-0917` | operator not authorised for a restricted relationship |
+
+`SEC-0917` fires for member `12347` (Restricted), which is where the `permission_denied`
+class of the fault taxonomy shows up in real data rather than only as an injected switch.
+
+Card PANs are stored in full and **never rendered** - the UI shows `**** **** **** 4412`
+only, the same redaction surface as the member tax id.
+
+### Seed cards
+
+| Member | Card | Type | Status |
+|---|---|---|---|
+| 12345 Abernathy | `****4412` | Debit | Active |
+| 12345 Abernathy | `****8830` | Credit | Inactive |
+| 12346 Lowe | `****1177` | Debit | Locked |
+| 12347 Millay | `****9902` | Debit | Active *(restricted member)* |
+| 12348 Flood | `****5540` | Debit | Blocked *(terminal)* |
+
 ## Fault injection
 
 Real demo sites will not produce runtime failures on demand, so the target exposes them as

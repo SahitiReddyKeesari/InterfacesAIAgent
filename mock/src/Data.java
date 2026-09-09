@@ -27,6 +27,33 @@ final class Data {
         }
     }
 
+    /** A payment card. The PAN is sensitive and is never rendered - only the last four. */
+    static final class Card {
+        final String pan;      // sensitive
+        final String kind;     // "Debit" | "Credit"
+        final String expiry;
+        String status;         // "Inactive" | "Active" | "Locked" | "Blocked"
+
+        Card(String pan, String kind, String expiry, String status) {
+            this.pan = pan;
+            this.kind = kind;
+            this.expiry = expiry;
+            this.status = status;
+        }
+
+        String last4() {
+            return pan.substring(pan.length() - 4);
+        }
+
+        String masked() {
+            return "**** **** **** " + last4();
+        }
+    }
+
+    /** Outcome of a card action: a business result, never an exception. */
+    record CardResult(boolean ok, String message) {
+    }
+
     static final class Member {
         final String memberId;
         final String firstName;
@@ -36,6 +63,7 @@ final class Data {
         final String status;
         final String branch;
         final List<Account> accounts = new ArrayList<>();
+        final List<Card> cards = new ArrayList<>();
 
         Member(String memberId, String firstName, String lastName, String ssn, String dob,
                String status, String branch) {
@@ -79,6 +107,12 @@ final class Data {
                                "Dormant", "Las Mudas");
         m4.accounts.add(new Account("0001234801", "Savings", 0.00, "Closed"));
 
+        m1.cards.add(new Card("4539881022444412", "Debit", "11/28", "Active"));
+        m1.cards.add(new Card("5412750199308830", "Credit", "04/27", "Inactive"));
+        m2.cards.add(new Card("4539881044101177", "Debit", "09/26", "Locked"));
+        m3.cards.add(new Card("4539881077029902", "Debit", "02/29", "Active"));
+        m4.cards.add(new Card("5412750133445540", "Debit", "07/25", "Blocked"));
+
         for (Member m : List.of(m1, m2, m3, m4)) {
             STATE.put(m.memberId, m);
         }
@@ -120,6 +154,79 @@ final class Data {
         Account a = new Account(number, kind, initial, "Open");
         m.accounts.add(a);
         return a;
+    }
+
+    static synchronized Card findCard(String memberId, String last4) {
+        Member m = get(memberId);
+        if (m == null) {
+            return null;
+        }
+        for (Card c : m.cards) {
+            if (c.last4().equals(last4)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Apply a card action.
+     *
+     * Every rejection here is a business outcome the caller needs to know about, not a
+     * crash: a card in the wrong state, a card that does not exist, or an operator who
+     * is not permitted to service a restricted relationship. Only "block" is
+     * irreversible - there is deliberately no path back out of Blocked.
+     */
+    static synchronized CardResult cardAction(String memberId, String last4, String action) {
+        Member m = get(memberId);
+        if (m == null) {
+            return new CardResult(false, "Member context lost.");
+        }
+        if (m.status.equals("Restricted")) {
+            return new CardResult(false,
+                    "Operator not authorized for restricted relationship (SEC-0917).");
+        }
+        Card c = findCard(memberId, last4);
+        if (c == null) {
+            return new CardResult(false, "Card not found for this relationship (CRD-2199).");
+        }
+        switch (action) {
+            case "activate" -> {
+                if (!c.status.equals("Inactive")) {
+                    return new CardResult(false,
+                            "Card is not awaiting activation (CRD-2201).");
+                }
+                c.status = "Active";
+                return new CardResult(true, "Card " + c.masked() + " activated.");
+            }
+            case "lock" -> {
+                if (!c.status.equals("Active")) {
+                    return new CardResult(false,
+                            "Only an active card can be locked (CRD-2203).");
+                }
+                c.status = "Locked";
+                return new CardResult(true, "Card " + c.masked() + " locked.");
+            }
+            case "unlock" -> {
+                if (!c.status.equals("Locked")) {
+                    return new CardResult(false,
+                            "Only a locked card can be unlocked (CRD-2204).");
+                }
+                c.status = "Active";
+                return new CardResult(true, "Card " + c.masked() + " unlocked.");
+            }
+            case "block" -> {
+                if (c.status.equals("Blocked")) {
+                    return new CardResult(false, "Card is already blocked (CRD-2210).");
+                }
+                c.status = "Blocked";
+                return new CardResult(true,
+                        "Card " + c.masked() + " permanently blocked.");
+            }
+            default -> {
+                return new CardResult(false, "Unsupported card action.");
+            }
+        }
     }
 
     static String money(double v) {

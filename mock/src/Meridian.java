@@ -41,10 +41,14 @@ final class Meridian {
         }
     }
 
-    /** State is just screen|memberId - enough to survive a postback. */
     static String encodeViewState(String screen, String memberId) {
-        byte[] raw = (screen + "|" + (memberId == null ? "" : memberId))
-                .getBytes(StandardCharsets.UTF_8);
+        return encodeViewState(screen, memberId, "");
+    }
+
+    /** State is screen|memberId|extra - enough to survive a postback. */
+    static String encodeViewState(String screen, String memberId, String extra) {
+        byte[] raw = (screen + "|" + (memberId == null ? "" : memberId)
+                + "|" + (extra == null ? "" : extra)).getBytes(StandardCharsets.UTF_8);
         return Base64.getEncoder().encodeToString(raw) + "." + sign(raw);
     }
 
@@ -60,7 +64,7 @@ final class Meridian {
                 return null;
             }
             String[] parts = new String(raw, StandardCharsets.UTF_8).split("\\|", -1);
-            return parts.length == 2 ? parts : null;
+            return parts.length == 3 ? parts : null;
         } catch (Exception e) {
             return null;
         }
@@ -102,8 +106,12 @@ final class Meridian {
         </script>""";
 
     private static String shell(String viewstate, String body) {
+        return shell("/meridian/main.aspx", viewstate, body);
+    }
+
+    private static String shell(String action, String viewstate, String body) {
         return CSS + "\n<body>\n<form name=\"aspnetForm\" method=\"post\" "
-                + "action=\"/meridian/main.aspx\" id=\"aspnetForm\">\n"
+                + "action=\"" + action + "\" id=\"aspnetForm\">\n"
                 + Http.render(POSTBACK, "viewstate", viewstate, "ev", EV)
                 + body + "\n</form>\n</body>";
     }
@@ -143,7 +151,7 @@ final class Meridian {
             <tr><td style="padding:4px 8px"><a href="/meridian/main.aspx" target="main">Member Inquiry</a></td></tr>
             <tr><td style="padding:4px 8px"><a href="#">Transaction Journal</a></td></tr>
             <tr><td style="padding:4px 8px"><a href="#">Holds &amp; Restraints</a></td></tr>
-            <tr><td style="padding:4px 8px"><a href="#">Card Services</a></td></tr>
+            <tr><td style="padding:4px 8px"><a href="/meridian/cards.aspx" target="main">Card Services</a></td></tr>
             <tr><td class="hdr">Administration</td></tr>
             <tr><td style="padding:4px 8px"><a href="#">Operator Profile</a></td></tr>
             </table>
@@ -389,6 +397,187 @@ final class Meridian {
             </body>""");
     }
 
+
+    // ---------------------------------------------------------------- card services
+
+    /** Which actions a card in a given state offers. Blocked is terminal. */
+    private static List<String> actionsFor(String status) {
+        return switch (status) {
+            case "Inactive" -> List.of("Activate", "Block");
+            case "Active" -> List.of("Lock", "Block");
+            case "Locked" -> List.of("Unlock", "Block");
+            default -> List.of();
+        };
+    }
+
+    static Http.Res cardServices(String memberId, String term, Data.Member m,
+                                 String message, boolean isError) {
+        String msgHtml = "";
+        if (message != null) {
+            msgHtml = "<tr><td colspan=\"4\" class=\"" + (isError ? "err" : "fld")
+                    + "\"><span id=\"ctl00_ContentPlaceHolder1_lblCardMsg\">"
+                    + (isError ? "" : "<b>") + Http.esc(message) + (isError ? "" : "</b>")
+                    + "</span></td></tr>";
+        }
+
+        String gridHtml = "";
+        if (m != null) {
+            StringBuilder rows = new StringBuilder();
+            for (int i = 0; i < m.cards.size(); i++) {
+                Data.Card c = m.cards.get(i);
+                String ctl = String.format("ctl%02d", i + 2);
+                StringBuilder links = new StringBuilder();
+                for (String a : actionsFor(c.status)) {
+                    if (links.length() > 0) {
+                        links.append(" &nbsp;|&nbsp; ");
+                    }
+                    links.append("<a id=\"ctl00_ContentPlaceHolder1_gvCards_").append(ctl)
+                         .append("_lnk").append(a).append("\" href=\"javascript:__doPostBack('")
+                         .append("ctl00$ContentPlaceHolder1$gvCards$").append(ctl)
+                         .append("$lnk").append(a).append("','')\">").append(a).append("</a>");
+                }
+                if (links.length() == 0) {
+                    links.append("&mdash;");
+                }
+                rows.append("<tr><td>").append(c.masked()).append("</td><td>").append(c.kind)
+                    .append("</td><td>").append(c.expiry).append("</td><td>").append(c.status)
+                    .append("</td><td>").append(links).append("</td></tr>");
+            }
+            gridHtml = """
+                <br>
+                <table class="pnl" width="100%" cellpadding="0" cellspacing="0">
+                  <tr><td class="hdr">Cards on Relationship ${id} &mdash; ${name}</td></tr>
+                  <tr><td style="padding:6px">
+                    <table class="grid" cellpadding="0" cellspacing="0" id="ctl00_ContentPlaceHolder1_gvCards">
+                      <tr><th>Card Number</th><th>Type</th><th>Expires</th><th>Status</th><th>Action</th></tr>
+                      ${rows}
+                    </table>
+                  </td></tr>
+                </table>""".replace("${id}", m.memberId)
+                           .replace("${name}", Http.esc(m.fullName()))
+                           .replace("${rows}", rows.toString());
+        }
+
+        String body = """
+            <table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:6px">
+              <table class="pnl" width="100%" cellpadding="0" cellspacing="0">
+                <tr><td class="hdr" colspan="4">Card Services</td></tr>
+                <tr>
+                  <td class="lbl"><span id="ctl00_ContentPlaceHolder1_lblCardMember">Member / Name:</span></td>
+                  <td class="fld"><input name="ctl00$ContentPlaceHolder1$txtCardMember" type="text" maxlength="32" size="24"
+                        id="ctl00_ContentPlaceHolder1_txtCardMember" value="${term}"></td>
+                  <td class="fld" colspan="2">
+                    <a id="ctl00_ContentPlaceHolder1_btnCardSearch" class="btn"
+                       href="javascript:__doPostBack('ctl00$ContentPlaceHolder1$btnCardSearch','')">Retrieve Cards</a>
+                  </td>
+                </tr>
+                ${message}
+              </table>
+              ${grid}
+            </td></tr></table>""";
+        body = Http.render(body, "term", Http.esc(term), "message", msgHtml, "grid", gridHtml);
+        return Http.Res.html(shell("/meridian/cards.aspx",
+                encodeViewState("cards", memberId, ""), body));
+    }
+
+    /**
+     * Blocking a card is irreversible, so it is gated behind an explicit confirmation
+     * step rather than firing straight off the grid link. Activate, Lock and Unlock are
+     * reversible and apply immediately.
+     */
+    static Http.Res blockConfirm(String memberId, Data.Card c) {
+        String body = """
+            <table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:6px">
+              <table class="pnl" width="100%" cellpadding="0" cellspacing="0">
+                <tr><td class="hdr" style="background:#a00" colspan="2">Confirm Permanent Block</td></tr>
+                <tr><td colspan="2" class="err">
+                  <span id="ctl00_ContentPlaceHolder1_lblBlockWarn">This action is permanent and cannot be reversed.
+                  The card cannot be reactivated once blocked.</span></td></tr>
+                <tr><td class="lbl">Card Number:</td>
+                    <td class="fld"><span id="ctl00_ContentPlaceHolder1_lblBlockCard">${masked}</span></td></tr>
+                <tr><td class="lbl">Type:</td><td class="fld">${kind}</td></tr>
+                <tr><td class="lbl">Current Status:</td><td class="fld">${status}</td></tr>
+                <tr><td colspan="2" class="fld">
+                  <a id="ctl00_ContentPlaceHolder1_btnConfirmBlock" class="btn"
+                     href="javascript:__doPostBack('ctl00$ContentPlaceHolder1$btnConfirmBlock','')">Confirm Block</a>
+                  &nbsp;
+                  <a id="ctl00_ContentPlaceHolder1_btnCancelBlock" class="btn"
+                     href="javascript:__doPostBack('ctl00$ContentPlaceHolder1$btnCancelBlock','')">Cancel</a>
+                </td></tr>
+              </table>
+            </td></tr></table>""";
+        body = Http.render(body, "masked", c.masked(), "kind", c.kind, "status", c.status);
+        return Http.Res.html(shell("/meridian/cards.aspx",
+                encodeViewState("blockconfirm", memberId, c.last4()), body));
+    }
+
+    private static Http.Res handleCards(Http.Req req) {
+        if (!req.isPost()) {
+            return cardServices(null, "", null, null, false);
+        }
+        if (Faults.fires("server_error")) {
+            return serverError();
+        }
+        String[] state = decodeViewState(req.form("__VIEWSTATE"));
+        if (state == null || Faults.fires("session_timeout")) {
+            return timeout();
+        }
+        if (Faults.fires("interstitial")) {
+            return interstitial();
+        }
+        Faults.maybeStall();
+
+        String target = req.form("__EVENTTARGET");
+        String memberId = state[1];
+        String pendingLast4 = state[2];
+        String term = req.form(P + "txtCardMember");
+
+        if (target.endsWith("btnCardSearch")) {
+            if (term.isBlank()) {
+                return cardServices(null, term, null, "Enter a member number or name.", true);
+            }
+            List<Data.Member> hits = Faults.fires("not_found") ? List.of() : Data.search(term);
+            if (hits.isEmpty()) {
+                return cardServices(null, term, null,
+                        "No member records match the criteria entered.", true);
+            }
+            Data.Member m = hits.get(0);
+            return cardServices(m.memberId, term, m, null, false);
+        }
+
+        Data.Member m = Data.get(memberId);
+
+        if (target.contains("gvCards")) {
+            int row = Integer.parseInt(target.split("\\$ctl")[1].split("\\$")[0]) - 2;
+            if (m == null || row < 0 || row >= m.cards.size()) {
+                return cardServices(memberId, term, m, "Selected card is no longer available.", true);
+            }
+            Data.Card c = m.cards.get(row);
+            if (target.endsWith("lnkBlock")) {
+                // Irreversible: confirm before doing anything.
+                if (m.status.equals("Restricted")) {
+                    return cardServices(memberId, term, m,
+                            "Operator not authorized for restricted relationship (SEC-0917).", true);
+                }
+                return blockConfirm(memberId, c);
+            }
+            String action = target.endsWith("lnkActivate") ? "activate"
+                    : target.endsWith("lnkLock") ? "lock"
+                    : target.endsWith("lnkUnlock") ? "unlock" : "";
+            Data.CardResult r = Data.cardAction(memberId, c.last4(), action);
+            return cardServices(memberId, term, Data.get(memberId), r.message(), !r.ok());
+        }
+
+        if (target.endsWith("btnConfirmBlock")) {
+            Data.CardResult r = Data.cardAction(memberId, pendingLast4, "block");
+            return cardServices(memberId, term, Data.get(memberId), r.message(), !r.ok());
+        }
+        if (target.endsWith("btnCancelBlock")) {
+            return cardServices(memberId, term, m, "Block cancelled. No change was made.", false);
+        }
+        return cardServices(memberId, term, m, null, false);
+    }
+
     // -------------------------------------------------------------------- routing
 
     static Http.Res handle(Http.Req req) {
@@ -402,6 +591,9 @@ final class Meridian {
         }
         if (path.equals("/meridian/nav.aspx")) {
             return nav();
+        }
+        if (path.equals("/meridian/cards.aspx")) {
+            return handleCards(req);
         }
         if (path.equals("/meridian/signon.aspx")) {
             return req.isPost() ? search(null, "", null, "Session re-established.") : signon();
