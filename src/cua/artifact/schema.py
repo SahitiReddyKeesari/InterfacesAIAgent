@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..surfaces.models import Action, Checkpoint, Locator
 
@@ -105,6 +105,14 @@ class InputParam(BaseModel):
     enum_values: list[str] | None = None
     pattern: str | None = None
     sensitive: bool = False   # never logged, never written to evidence
+
+    @model_validator(mode="after")
+    def _no_example_for_secrets(self) -> "InputParam":
+        """An example of a tax identifier is a tax identifier. Documentation is not an
+        exemption from redaction, so a sensitive input simply has no example."""
+        if self.sensitive and self.example:
+            self.example = None
+        return self
 
     def validate_value(self, value: Any) -> str | None:
         """Return an error message, or None when the value is acceptable."""

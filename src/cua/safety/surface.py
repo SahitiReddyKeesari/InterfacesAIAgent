@@ -40,6 +40,7 @@ class PolicySurface:
         self.redactor = redactor or Redactor()
         self.approver = approver or _deny
         self.name = f"policy({getattr(inner, 'name', 'surface')})"
+        self.guarded = True   # lets engines skip re-wrapping an already-guarded chain
         self.violations: list[str] = []
 
     # -------------------------------------------------------------- perceive

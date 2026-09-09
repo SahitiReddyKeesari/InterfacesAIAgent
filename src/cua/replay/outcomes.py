@@ -51,6 +51,10 @@ class ReplayResult(BaseModel):
     # a signal the surface has changed even though the run succeeded
     recoveries: list[str] = Field(default_factory=list)
 
+    # ESCALATED / handed to a person and resumed
+    escalations: list[str] = Field(default_factory=list)
+    human_changes: list[str] = Field(default_factory=list)
+
     # HARD_FAILURE / BLOCKED_BY_POLICY
     failed_step: int | None = None
     expected: str = ""
@@ -89,6 +93,8 @@ class ReplayResult(BaseModel):
             notes = []
             if self.recoveries:
                 notes.append(f"recovered from {', '.join(self.recoveries)}")
+            if self.escalations:
+                notes.append(f"after human intervention {', '.join(self.escalations)}")
             if self.weak_steps:
                 notes.append(f"weak steps: {self.weak_steps}")
             suffix = f"  ({'; '.join(notes)})" if notes else ""

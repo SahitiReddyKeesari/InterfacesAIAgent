@@ -53,7 +53,9 @@ class ReplayEngine:
         self.redactor = Redactor()
         # Wrap unconditionally. A caller that forgets to pass a guarded surface must
         # still not be able to act outside the allowlist.
-        self.surface = (surface if isinstance(surface, PolicySurface)
+        # Wrap only if nothing in the chain is already enforcing policy - that lets a
+        # ControlledSurface sit outside a PolicySurface without losing the allowlist.
+        self.surface = (surface if getattr(surface, "guarded", False)
                         else PolicySurface(surface, policy, self.redactor, approver))
         self.approver = approver
 
@@ -95,7 +97,10 @@ class ReplayEngine:
         traces: list[StepTrace] = []
         outputs: dict[str, str] = {}
         recoveries: list[str] = []
+        escalations: list[str] = []
+        human_changes: list[str] = []
         attempts: dict[str, int] = {}
+        escalated_steps: set[int] = set()
 
         index = 0
         while index < len(plan.steps):
@@ -110,7 +115,8 @@ class ReplayEngine:
                                     failed_step=step.index, error=gate.reason,
                                     expected=f"policy to permit a {step.risk.value} step",
                                     observed=gate.decision.value,
-                                    steps=traces, outputs=outputs, recoveries=recoveries)
+                                    steps=traces, outputs=outputs, recoveries=recoveries,
+                                    escalations=escalations, human_changes=human_changes)
 
             result = self.surface.act(step.action)
             trace = StepTrace(
@@ -157,7 +163,8 @@ class ReplayEngine:
                 return ReplayResult(outcome=known.outcome, **base,
                                     business_outcome=known.name,
                                     business_detail=known.description,
-                                    steps=traces, outputs=outputs, recoveries=recoveries)
+                                    steps=traces, outputs=outputs, recoveries=recoveries,
+                                    escalations=escalations, human_changes=human_changes)
 
             condition = self._match_recoverable(plan)
             if condition is not None:
@@ -177,6 +184,44 @@ class ReplayEngine:
 
             reason = (checkpoint.reason() if checkpoint is not None and not checkpoint.passed
                       else result.detail)
+
+            # Nothing recorded explains this. If a person can be brought into the same
+            # live session, ask - once per step, so a hopeless step cannot loop a human.
+            if (hasattr(self.surface, "escalate")
+                    and step.index not in escalated_steps):
+                escalated_steps.add(step.index)
+                handoff = self.surface.escalate(
+                    reason=f"step {step.index} ({step.intent}) could not be completed",
+                    evidence_dir=recorder.dir if recorder else None,
+                    run_id=recorder.run_id if recorder else "",
+                    capability_id=plan.capability_id, goal=capability.provenance.goal,
+                    step_index=step.index, step_intent=step.intent,
+                    expected=(step.checkpoint.description if step.checkpoint
+                              else "the step to succeed"),
+                    observed=reason)
+                escalations.append(handoff.request_id)
+                human_changes.extend(handoff.changes)
+                self._log(recorder, "resumed", "control returned to automation",
+                          step=step.index, changes=handoff.changes,
+                          operator=handoff.operator)
+                if handoff.operator is not None:
+                    # Resume where the operator said it is safe to, defaulting to the
+                    # step that failed. Someone who reset the application has
+                    # invalidated the steps before it too.
+                    if (handoff.resumed_from_step is not None
+                            and handoff.resumed_from_step != step.index):
+                        index = next((i for i, s in enumerate(plan.steps)
+                                      if s.index == handoff.resumed_from_step), index)
+                        self._log(recorder, "resuming_from",
+                                  f"operator set the resume point to step "
+                                  f"{handoff.resumed_from_step}", step=step.index)
+                    continue
+                return ReplayResult(
+                    outcome=Outcome.ESCALATED, **base, failed_step=step.index,
+                    error="no operator took the intervention", expected=reason,
+                    observed="intervention abandoned", steps=traces, outputs=outputs,
+                    recoveries=recoveries, escalations=escalations,
+                    human_changes=human_changes)
             if recorder:
                 recorder.failure(f"step {step.index} ({step.intent}) did not complete",
                                  surface=self.surface, label=f"step-{step.index}-failed",
@@ -186,23 +231,27 @@ class ReplayEngine:
                 error=f"step {step.index} ({step.intent}) did not complete",
                 expected=(step.checkpoint.description if step.checkpoint
                           else f"the {trace.action} to succeed"),
-                observed=reason, steps=traces, outputs=outputs, recoveries=recoveries)
+                observed=reason, steps=traces, outputs=outputs, recoveries=recoveries,
+                                    escalations=escalations, human_changes=human_changes)
 
         # Every step ran. The success checkpoint is the last word.
         final = self.surface.check(plan.success)
         self._log(recorder, "success_checkpoint", plan.success.description,
                   passed=final.passed, reason=final.reason())
         if final.passed:
-            outcome = Outcome.RECOVERED if recoveries else Outcome.SUCCESS
+            outcome = (Outcome.RECOVERED if (recoveries or escalations)
+                       else Outcome.SUCCESS)
             return ReplayResult(outcome=outcome, **base, outputs=outputs,
-                                steps=traces, recoveries=recoveries)
+                                steps=traces, recoveries=recoveries,
+                                escalations=escalations, human_changes=human_changes)
 
         known = self._match_known(plan)
         if known is not None:
             return ReplayResult(outcome=known.outcome, **base,
                                 business_outcome=known.name,
                                 business_detail=known.description,
-                                steps=traces, outputs=outputs, recoveries=recoveries)
+                                steps=traces, outputs=outputs, recoveries=recoveries,
+                                    escalations=escalations, human_changes=human_changes)
 
         if recorder:
             recorder.failure("every step ran but the success condition was not met",
@@ -212,7 +261,8 @@ class ReplayEngine:
             failed_step=plan.steps[-1].index if plan.steps else None,
             error="every step ran but the success condition was not met",
             expected=plan.success.description, observed=final.reason(),
-            steps=traces, outputs=outputs, recoveries=recoveries)
+            steps=traces, outputs=outputs, recoveries=recoveries,
+                                    escalations=escalations, human_changes=human_changes)
 
     # ------------------------------------------------------------ classifiers
     def _match_known(self, plan: BoundPlan) -> KnownOutcome | None:
