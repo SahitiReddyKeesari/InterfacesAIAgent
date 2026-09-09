@@ -232,3 +232,93 @@ def test_dashboards_diverge_in_wording_and_navigation(srv):
 
 def test_fault_names_all_carry_a_taxonomy_class(srv):
     assert set(srv.state()["taxonomy"].values()) == {"business", "recover", "hard"}
+
+
+# ------------------------------------------------------------- card services
+CARDS = "/meridian/cards.aspx"
+
+
+def card_rows(html: str) -> list[tuple[str, str, str]]:
+    """(masked number, type, status) per row of the card grid."""
+    return re.findall(
+        r"<td>(\*\*\*\* \*\*\*\* \*\*\*\* \d{4})</td><td>(\w+)</td><td>[\d/]+</td><td>(\w+)</td>",
+        html)
+
+
+def card_message(html: str) -> str:
+    m = re.search(r'lblCardMsg">(?:<b>)?([^<]*)', html)
+    return m.group(1).strip() if m else ""
+
+
+def cards_for(srv, member_id: str) -> str:
+    h = srv.get(CARDS)
+    return srv.html(CARDS, __VIEWSTATE=viewstate(h),
+                    __EVENTTARGET=P + "btnCardSearch",
+                    **{P + "txtCardMember": member_id})
+
+
+def card_action(srv, html: str, ctl: str, action: str, member_id: str = "12345") -> str:
+    return srv.html(CARDS, __VIEWSTATE=viewstate(html),
+                    __EVENTTARGET=f"{P}gvCards${ctl}$lnk{action}",
+                    **{P + "txtCardMember": member_id})
+
+
+def test_cards_never_render_a_full_pan(srv):
+    h = cards_for(srv, "12345")
+    assert "4539881022444412" not in h
+    assert "**** **** **** 4412" in h
+
+
+def test_activate_moves_inactive_card_to_active(srv):
+    h = card_action(srv, cards_for(srv, "12345"), "ctl03", "Activate")
+    assert "activated" in card_message(h)
+    assert card_rows(h)[1][2] == "Active"
+
+
+def test_activating_an_active_card_is_a_business_outcome(srv):
+    h = card_action(srv, cards_for(srv, "12345"), "ctl03", "Activate")
+    h = card_action(srv, h, "ctl03", "Activate")
+    assert "CRD-2201" in card_message(h)
+
+
+def test_lock_and_unlock_are_reversible(srv):
+    h = card_action(srv, cards_for(srv, "12345"), "ctl02", "Lock")
+    assert card_rows(h)[0][2] == "Locked"
+    h = card_action(srv, h, "ctl02", "Unlock")
+    assert card_rows(h)[0][2] == "Active"
+
+
+def test_block_requires_confirmation_before_taking_effect(srv):
+    """The irreversible action must not fire straight off the grid link."""
+    h = card_action(srv, cards_for(srv, "12345"), "ctl02", "Block")
+    assert "Confirm Permanent Block" in h
+    assert "cannot be reversed" in h
+    assert "Blocked" not in "".join(r[2] for r in card_rows(h))
+
+
+def test_cancelling_a_block_changes_nothing(srv):
+    h = card_action(srv, cards_for(srv, "12345"), "ctl02", "Block")
+    h = srv.html(CARDS, __VIEWSTATE=viewstate(h), __EVENTTARGET=P + "btnCancelBlock",
+                 **{P + "txtCardMember": "12345"})
+    assert card_rows(h)[0][2] == "Active"
+    assert "cancelled" in card_message(h)
+
+
+def test_confirmed_block_is_terminal(srv):
+    h = card_action(srv, cards_for(srv, "12345"), "ctl02", "Block")
+    h = srv.html(CARDS, __VIEWSTATE=viewstate(h), __EVENTTARGET=P + "btnConfirmBlock",
+                 **{P + "txtCardMember": "12345"})
+    assert card_rows(h)[0][2] == "Blocked"
+    assert "permanently blocked" in card_message(h)
+    # A blocked card offers no further actions in the UI.
+    assert "&mdash;" in h
+    # And forging the postback anyway still gets a business outcome, not a crash.
+    h = card_action(srv, h, "ctl02", "Block")
+    h = srv.html(CARDS, __VIEWSTATE=viewstate(h), __EVENTTARGET=P + "btnConfirmBlock",
+                 **{P + "txtCardMember": "12345"})
+    assert "CRD-2210" in card_message(h)
+
+
+def test_restricted_member_card_action_is_permission_denied(srv):
+    h = card_action(srv, cards_for(srv, "12347"), "ctl02", "Lock", member_id="12347")
+    assert "SEC-0917" in card_message(h)
