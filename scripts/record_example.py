@@ -7,10 +7,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from cua.artifact.examples import build
 from cua.artifact.store import Store
 
 REPO = Path(__file__).resolve().parent.parent
+# The recorded example is a test fixture, not part of the engine - `cua` knows nothing
+# about any specific application, so the recipe for this one lives with the tests.
+sys.path.insert(0, str(REPO))
+from tests.fixtures.meridian_capability import build  # noqa: E402
 
 if __name__ == "__main__":
     base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8080"

@@ -188,7 +188,7 @@ def run_plan(surface, plan) -> tuple[str, dict[str, str]]:
 
 @pytest.fixture(scope="module")
 def recorded(base_url):
-    from cua.artifact.examples import build
+    from tests.fixtures.meridian_capability import build
     return build(base_url)
 
 

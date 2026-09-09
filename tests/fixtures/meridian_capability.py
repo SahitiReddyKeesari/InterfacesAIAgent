@@ -1,9 +1,16 @@
-"""A hand-recorded capability, used to exercise the artifact schema end to end.
+"""A hand-recorded capability for the Meridian dashboard - a TEST FIXTURE.
 
-This is the shape the LLM discovery loop emits. Written by hand so the schema, binding,
+This lives under tests/, deliberately, and not inside the `cua` package. Everything in
+`cua` is a general computer-use engine that must know nothing about any particular
+application; the moment target-specific knowledge - captions, member numbers, account
+types - sits inside it, the claim that a recording is portable stops being testable.
+Knowledge of a target belongs to whoever is driving the engine: the discovery loop's
+model at record time, and fixtures like this one at test time.
+
+It is the shape the LLM discovery loop emits, written by hand so the schema, binding,
 storage and replay contract could be validated against a live surface before a model was
-involved - and kept, because it gives the test suite a real artifact whose locators come
-from genuine observations rather than from hand-authored guesses.
+involved - and kept, because it gives the suite a real artifact whose locators come from
+genuine observations rather than hand-authored guesses.
 """
 from __future__ import annotations
 
