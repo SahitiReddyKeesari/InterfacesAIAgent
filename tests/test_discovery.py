@@ -228,7 +228,28 @@ def test_the_model_cannot_alter_a_caller_supplied_value(agent_for, base_url, srv
 
 
 def test_the_prompt_names_the_available_parameters(agent_for, base_url, srv):
-    agent, guarded = agent_for(HAPPY)
+    """The model has to know which parameters exist before it can name one."""
+    agent, _ = agent_for(HAPPY)
     agent.run(config(base_url))
-    assert "member_id" in agent.llm.prompts[0]
-    assert "never retype" in agent.llm.prompts[0]
+    first_prompt = agent.llm.prompts[0]
+    assert "member_id" in first_prompt
+    assert "never retype" in first_prompt
+
+
+def test_the_parameter_field_is_constrained_to_declared_names():
+    """A free-text parameter field invited the model to write an explanation into the
+    value instead of naming a parameter. An enum makes that impossible."""
+    from cua.discovery.prompts import NO_PARAMETER, decision_schema
+
+    schema = decision_schema(["member_id", "account_type"])
+    assert schema["properties"]["parameter"]["enum"] == [
+        "member_id", "account_type", NO_PARAMETER]
+
+
+def test_an_unrecognised_parameter_name_falls_back_to_the_literal(agent_for, base_url, srv):
+    script = list(HAPPY)
+    script[0] = {**script[0], "parameter": "not_declared", "text": "12345"}
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    fill = next(s for s in capability.steps if s.action.kind == "fill")
+    assert fill.action.text == "{member_id}"   # the literal still gets parameterised

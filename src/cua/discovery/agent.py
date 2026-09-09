@@ -30,7 +30,7 @@ from ..surfaces.base import Surface
 from ..surfaces.models import (Checkpoint, Click, Fill, Navigate, Observation,
                                Read, Scope, Select)
 from .llm.base import LLMError, LLMProvider
-from .prompts import DECISION_SCHEMA, SYSTEM, render_observation
+from .prompts import NO_PARAMETER, SYSTEM, decision_schema, render_observation
 
 
 class DiscoveryFailed(RuntimeError):
@@ -96,6 +96,7 @@ class DiscoveryAgent:
         self._log("discovery_started", config.goal, entry_url=config.entry_url,
                   model=getattr(self.llm, "model", "?"), budget=config.max_steps)
 
+        schema = decision_schema(list(config.parameters))
         steps: list[Step] = [Step(index=0, intent="Open the application.",
                                   action=Navigate(url=config.entry_url),
                                   risk=RiskClass.SAFE)]
@@ -113,7 +114,7 @@ class DiscoveryAgent:
                                         turn, config.max_steps, config.parameters)
             self._transcript.append({"turn": turn, "screen": prompt})
             try:
-                decision = self.llm.complete_json(SYSTEM, prompt, DECISION_SCHEMA)
+                decision = self.llm.complete_json(SYSTEM, prompt, schema)
                 self._transcript[-1]["decision"] = decision
             except LLMError as exc:
                 self._log("model_error", str(exc), turn=turn)
@@ -206,6 +207,9 @@ class DiscoveryAgent:
         if named in config.parameters:
             text = "{" + named + "}"
         else:
+            if named and named != NO_PARAMETER:
+                self._log("unknown_parameter", named,
+                          note="not a declared parameter; falling back to the literal")
             text = self._placeholder(decision.get("text"), config.parameters)
         intent = decision.get("reasoning", "").strip() or f"{kind} {locator.description}"
         risk = self._risk(decision.get("risk"))

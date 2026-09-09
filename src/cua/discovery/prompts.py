@@ -32,11 +32,11 @@ without you. Prefer a heading or a label over a value that will differ next time
 - Classify each action's `risk`: `safe` if nothing persists (reading, typing, \
 navigating), `consequential` if it writes something that another flow could undo, \
 `irreversible` if it cannot be undone through this application.
-- When typing a value the caller supplies, set `parameter` to that parameter's name \
-and leave `text` empty. The exact value is filled in for you. Do not retype, reformat, \
-pad or zero-fill it - the application is fussier than it looks, and a value you adjust \
-is a value that no longer matches the caller's.
-- Use `text` only for a literal you chose yourself, which is rare.
+- To type a value the caller supplied, set `parameter` to its name. The exact value is \
+substituted for you - you never see it and must not guess, reformat, pad or zero-fill \
+it. Set `parameter` to "none" only when typing a literal you chose yourself.
+- `text` is the literal characters to type, and nothing else. Never put an explanation, \
+a note or a placeholder in it.
 - Use `read` to extract a value the caller asked for, and give it a short snake_case \
 `output_name`.
 - Answer `done` when the goal is complete, and set `success_text` to a phrase that \
@@ -45,9 +45,28 @@ proves it. Answer `give_up` if you are stuck or the goal appears impossible.
 Never enter credentials, and never take an irreversible action unless the goal \
 explicitly asks for it."""
 
+NO_PARAMETER = "none"
+
+
+def decision_schema(parameter_names: list[str] | None = None) -> dict:
+    """The response contract for one run.
+
+    `parameter` is constrained to an enum of the actual declared names because a free
+    string invited exactly the failure this was written after: asked to name a
+    parameter, the model instead wrote an explanatory sentence into the value field and
+    the loop typed it into the search box. Constraining a field is far more reliable
+    than instructing the model about it - the same reason `action` is an enum.
+    """
+    schema = {k: (dict(v) if isinstance(v, dict) else v)
+              for k, v in _DECISION_SCHEMA.items()}
+    schema["properties"] = {k: dict(v) for k, v in _DECISION_SCHEMA["properties"].items()}
+    schema["properties"]["parameter"]["enum"] = [*(parameter_names or []), NO_PARAMETER]
+    return schema
+
+
 # The response contract. Constrained so a malformed reply is impossible rather than
 # merely unlikely - the loop should never have to parse prose.
-DECISION_SCHEMA = {
+_DECISION_SCHEMA = {
     "type": "object",
     "properties": {
         "reasoning": {"type": "string",
@@ -57,8 +76,8 @@ DECISION_SCHEMA = {
         "target_ref": {"type": "string",
                        "description": "Reference of the control to act on, e.g. main#7."},
         "parameter": {"type": "string",
-                      "description": "Name of a caller-supplied parameter to type. "
-                                     "Preferred over `text` whenever one applies."},
+                      "description": "Name of a caller-supplied parameter to type, or "
+                                     "\"none\" for a literal in `text`."},
         "text": {"type": "string",
                  "description": "A literal value to type or select, when no parameter "
                                 "applies. Never a reformatted parameter value."},
