@@ -30,6 +30,9 @@ class Surface(Protocol):
     def act(self, action: Action) -> ActionResult:
         """Carry out one action, returning what happened rather than raising."""
 
+    def current_url(self) -> str:
+        """Where the surface is now. Cheap - no full observation."""
+
     def check(self, checkpoint: Checkpoint) -> CheckResult:
         """Evaluate a checkpoint by observing only. Never acts, so it is safe to call
         repeatedly and cannot disturb the state being verified."""

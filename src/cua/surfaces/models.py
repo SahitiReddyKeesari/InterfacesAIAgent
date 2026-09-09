@@ -258,7 +258,15 @@ class Resolution(BaseModel):
 
 
 class ActionResult(BaseModel):
+    """What an action did.
+
+    `blocked` is separate from `ok` on purpose: a refusal by policy is not a failure of
+    the automation, and a caller that cannot tell them apart will retry something it was
+    told not to do.
+    """
+
     ok: bool
+    blocked: bool = False
     resolution: Resolution | None = None
     value: str | None = None
     detail: str = ""

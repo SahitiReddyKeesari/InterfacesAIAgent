@@ -405,6 +405,9 @@ class PlaywrightSurface:
         return ActionResult(ok=True, resolution=res,
                             detail=f"{kind} via {res.strategy.value if res.strategy else '?'}")
 
+    def current_url(self) -> str:
+        return self._page.url
+
     # ------------------------------------------------------------- checkpoints
     def check(self, checkpoint: Checkpoint) -> CheckResult:
         obs = self.observe()
