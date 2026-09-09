@@ -171,12 +171,18 @@ final class Summit {
     }
 
     static Http.Res detail(Data.Member m) {
+        return detail(m, null);
+    }
+
+    static Http.Res detail(Data.Member m, String message) {
         StringBuilder rows = new StringBuilder();
         for (Data.Account a : m.accounts) {
             rows.append("<tr><td>").append(a.number).append("</td><td>").append(a.kind)
                 .append("</td><td align=\"right\">").append(Data.money(a.balance))
                 .append("</td><td>").append(a.status).append("</td></tr>");
         }
+        String msgHtml = message == null ? ""
+                : "<tr><td colspan=\"4\" class=\"msg\">" + Http.esc(message) + "</td></tr>";
         String body = CSS + """
             <body>
             <form name="customerDetailForm" method="post" action="/summit/customerDetail.do">
@@ -189,6 +195,7 @@ final class Summit {
                     <td class="cap">Rel Status:</td><td>${status}</td></tr>
                 <tr><td class="cap">Tax Identification:</td><td>${tin}</td>
                     <td class="cap">Servicing Office:</td><td>${office}</td></tr>
+                ${message}
               </table>
             </td></tr></table>
             <br>
@@ -212,7 +219,7 @@ final class Summit {
         return Http.Res.html(Http.render(body, "tokenField", TOKEN_FIELD, "token", token(),
                 "id", m.memberId, "sur", Http.esc(m.lastName), "giv", Http.esc(m.firstName),
                 "status", m.status, "tin", m.maskedSsn(), "office", m.branch,
-                "rows", rows.toString()));
+                "rows", rows.toString(), "message", msgHtml));
     }
 
     static Http.Res addAccount(Data.Member m, String product, String amount, List<String> errors) {
@@ -392,8 +399,17 @@ final class Summit {
         }
 
         if (path.equals("/summit/customerDetail.do")) {
-            return action.equals("Return") ? search("", null, null)
-                                           : addAccount(m, "", "", null);
+            if (action.equals("Return")) {
+                return search("", null, null);
+            }
+            // Same rule as Meridian, in this dialect's wording. The two dashboards
+            // disagreeing about who may service a restricted relationship would be a
+            // bug, not a tenant difference.
+            if (m.status.equals("Restricted")) {
+                return detail(m, "Teller not authorized for restricted relationship "
+                                 + "(SUM-0917).");
+            }
+            return addAccount(m, "", "", null);
         }
 
         // relatedAccount.do

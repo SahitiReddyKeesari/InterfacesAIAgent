@@ -27,6 +27,18 @@ def token(html: str) -> str:
 
 
 # --------------------------------------------------------------- Dashboard A
+def meridian_to_detail(srv, member_id="12345") -> str:
+    """Walk Meridian as far as the member detail screen; return that page's HTML."""
+    h = srv.get("/meridian/main.aspx")
+    h = srv.html("/meridian/main.aspx", __VIEWSTATE=viewstate(h),
+                 __EVENTTARGET=P + "btnSearch", **{P + "txtMemberId": member_id})
+    h = srv.html("/meridian/main.aspx", __VIEWSTATE=viewstate(h),
+                 __EVENTTARGET=P + "gvResults$ctl02$lnkSelect",
+                 **{P + "txtMemberId": member_id})
+    assert "Member Detail" in h
+    return h
+
+
 def meridian_to_subaccount(srv, member_id="12345") -> str:
     """Walk Meridian as far as the sub-account form; return that page's HTML."""
     h = srv.get("/meridian/main.aspx")
@@ -122,6 +134,37 @@ def test_summit_not_found_is_a_business_outcome(srv):
     h = srv.html("/summit/memberSearch.do", **{TOKEN_FIELD: token(h)},
                  customerNbr="12345", submitAction="Retrieve")
     assert "No customer records retrieved" in h
+
+
+def test_restricted_member_is_denied_visibly_on_meridian(srv):
+    """A refusal must explain itself. Silently returning to the previous screen is
+    indistinguishable from a broken link."""
+    h = meridian_to_detail(srv, "12347")
+    h = srv.html("/meridian/main.aspx", __VIEWSTATE=viewstate(h),
+                 __EVENTTARGET=P + "btnOpenSub")
+    assert "SEC-0917" in h
+    assert "ddlAcctType" not in h          # the form was not reached
+
+
+def test_restricted_member_is_denied_visibly_on_summit(srv):
+    """Both dashboards must agree on who may service a restricted relationship -
+    disagreeing would be a bug, not a tenant difference."""
+    h = srv.get("/summit/memberSearch.do")
+    h = srv.html("/summit/memberSearch.do", **{TOKEN_FIELD: token(h)},
+                 customerNbr="12347", submitAction="Retrieve")
+    h = srv.html("/summit/memberSearch.do", **{TOKEN_FIELD: token(h)},
+                 customerNbr="12347", selectCustomer="Open", selectedIdx="0")
+    h = srv.html("/summit/customerDetail.do", **{TOKEN_FIELD: token(h)},
+                 customerNbr="12347", submitAction="Add Related Account")
+    assert "SUM-0917" in h
+    assert "productCd" not in h            # the form was not reached
+
+
+def test_unrestricted_members_are_still_allowed_on_both(srv):
+    h = meridian_to_detail(srv, "12345")
+    h = srv.html("/meridian/main.aspx", __VIEWSTATE=viewstate(h),
+                 __EVENTTARGET=P + "btnOpenSub")
+    assert "ddlAcctType" in h
 
 
 # ------------------------------------------------------------ heterogeneity

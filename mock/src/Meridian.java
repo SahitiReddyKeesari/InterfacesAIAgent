@@ -229,16 +229,29 @@ final class Meridian {
     }
 
     static Http.Res detail(Data.Member m) {
+        return detail(m, null);
+    }
+
+    /**
+     * @param message an operator-facing explanation, or null. A refusal that silently
+     *                returns the operator to the previous screen is indistinguishable
+     *                from a broken link, so a denied action always says why.
+     */
+    static Http.Res detail(Data.Member m, String message) {
         StringBuilder rows = new StringBuilder();
         for (Data.Account a : m.accounts) {
             rows.append("<tr><td>").append(a.number).append("</td><td>").append(a.kind)
                 .append("</td><td align=\"right\">").append(Data.money(a.balance))
                 .append("</td><td>").append(a.status).append("</td></tr>");
         }
+        String msgHtml = message == null ? ""
+                : "<tr><td colspan=\"4\" class=\"err\"><span id=\"ctl00_ContentPlaceHolder1_lblDenied\">"
+                  + Http.esc(message) + "</span></td></tr>";
         String body = """
             <table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:6px">
               <table class="pnl" width="100%" cellpadding="0" cellspacing="0">
                 <tr><td class="hdr" colspan="4">Member Detail &mdash; ${id}</td></tr>
+                ${message}
                 <tr><td class="lbl">Name:</td>
                     <td class="fld"><span id="ctl00_ContentPlaceHolder1_lblName">${name}</span></td>
                     <td class="lbl">Status:</td>
@@ -268,7 +281,7 @@ final class Meridian {
             </td></tr></table>""";
         body = Http.render(body, "id", m.memberId, "name", Http.esc(m.fullName()),
                            "status", m.status, "tin", m.maskedSsn(), "branch", m.branch,
-                           "rows", rows.toString());
+                           "rows", rows.toString(), "message", msgHtml);
         return Http.Res.html(shell(encodeViewState("detail", m.memberId), body));
     }
 
@@ -649,7 +662,11 @@ final class Meridian {
             if (m == null) {
                 return search(null, "", null, "Member context lost.");
             }
-            return m.status.equals("Restricted") ? detail(m) : subaccount(m, "", "", null);
+            if (m.status.equals("Restricted")) {
+                return detail(m, "Operator not authorized for restricted relationship "
+                                 + "(SEC-0917).");
+            }
+            return subaccount(m, "", "", null);
         }
         if (target.endsWith("btnSubmit")) {
             if (m == null) {
