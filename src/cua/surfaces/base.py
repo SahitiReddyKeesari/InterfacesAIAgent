@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from .models import Action, ActionResult, Locator, Observation, Resolution
+from .models import (Action, ActionResult, CheckResult, Checkpoint, Locator,
+                     Observation, Resolution)
 
 
 @runtime_checkable
@@ -28,6 +29,10 @@ class Surface(Protocol):
 
     def act(self, action: Action) -> ActionResult:
         """Carry out one action, returning what happened rather than raising."""
+
+    def check(self, checkpoint: Checkpoint) -> CheckResult:
+        """Evaluate a checkpoint by observing only. Never acts, so it is safe to call
+        repeatedly and cannot disturb the state being verified."""
 
     def capture(self, label: str) -> Path | None:
         """Persist a richer signal for evidence (screenshot, snapshot, trace)."""

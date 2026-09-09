@@ -100,6 +100,45 @@
       ordinal: counters[role] - 1,
     });
   }
+  // Second pass: values a flow needs to *read*. Interactive controls alone cannot
+  // satisfy a typed output contract - a balance or a name is a span or a cell.
+  // Grid cells carry their column header, which is how "the Current Balance cell in
+  // the row for this account" stays meaningful when columns move.
+  const headerFor = (cell) => {
+    const table = cell.closest('table');
+    if (!table || !table.rows.length) return '';
+    const row = cell.closest('tr');
+    if (!row || row === table.rows[0]) return '';
+    const idx = Array.prototype.indexOf.call(row.cells, cell);
+    const head = table.rows[0];
+    if (idx < 0 || !head || idx >= head.cells.length) return '';
+    return clean(head.cells[idx].textContent);
+  };
+
+  let readable = 0;
+  for (const el of document.querySelectorAll('span[id], output[id], td, th')) {
+    if (readable >= 300) break;
+    if (el.querySelector('input, select, textarea, a, button, table')) continue;
+    const content = clean(el.textContent);
+    if (!content || content.length > 200) continue;
+    const isCell = ['td', 'th'].includes(el.tagName.toLowerCase());
+    const role = isCell ? 'cell' : 'text';
+    counters[role] = (counters[role] || 0) + 1;
+    readable += 1;
+    out.push({
+      role,
+      name: '',
+      value: content,
+      label_text: captionFor(el),
+      column_header: isCell ? headerFor(el) : '',
+      control_id: el.id || '',
+      text: content,
+      enabled: true,
+      visible: visible(el),
+      ordinal: counters[role] - 1,
+    });
+  }
+
   return {
     title: document.title,
     text: clean(document.body ? document.body.innerText : '').slice(0, 4000),

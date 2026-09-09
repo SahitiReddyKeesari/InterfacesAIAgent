@@ -21,6 +21,7 @@ from .models import Candidate, Element, Locator, Role, Scope, Strategy
 _POSITIONAL_ID = re.compile(r"(_ctl\d+_|\$ctl\d+\$)")
 
 _INPUT_ROLES = {Role.TEXTBOX, Role.COMBOBOX, Role.CHECKBOX, Role.RADIO}
+_READABLE_ROLES = {Role.TEXT, Role.CELL}
 _CLICKABLE_ROLES = {Role.BUTTON, Role.LINK}
 
 
@@ -55,14 +56,33 @@ def build(element: Element, description: str | None = None,
 
     # 2. Caption text. In these apps inputs have no <label for>, so the caption in the
     #    neighbouring cell is the only human-meaningful handle on the field.
-    if label and element.role in _INPUT_ROLES:
+    header = _clean(element.column_header)
+    # For a grid data cell the "preceding cell" is the neighbouring column's *value*,
+    # not a caption - anchoring to it would justify a step with unrelated data. A cell
+    # that knows its column heading is named by that instead.
+    caption_is_meaningful = not (element.role is Role.CELL and header)
+    if label and caption_is_meaningful and element.role in (_INPUT_ROLES | _READABLE_ROLES):
+        anchored = ("field" if element.role in _INPUT_ROLES else "displayed value")
         candidates.append(Candidate(
             strategy=Strategy.LABEL_TEXT,
             value=label,
             confidence=0.85,
-            rationale="caption in the adjacent table cell; this page associates no "
-                      "<label for> with its inputs, so this is the field's only "
-                      "human-meaningful anchor",
+            rationale=f"caption in the adjacent table cell; this page associates no "
+                      f"<label for> with its controls, so this is the {anchored}'s only "
+                      f"human-meaningful anchor",
+        ))
+
+    # 2b. A grid cell is named by its column, not its position. Pairing this with a
+    #     row scope gives "the Current Balance cell of the Savings row", which survives
+    #     both reordered rows and reordered columns.
+    if header and element.role is Role.CELL:
+        candidates.append(Candidate(
+            strategy=Strategy.COLUMN_CELL,
+            value=header,
+            confidence=0.88,
+            rationale="cell identified by its column heading; combined with a row scope "
+                      "this names the value rather than its coordinates, and column "
+                      "headings exist on desktop grids too",
         ))
 
     # 3. Generated control id. Stable in WebForms while the control tree is stable -
@@ -105,6 +125,7 @@ def build(element: Element, description: str | None = None,
     candidates.sort(key=lambda c: c.confidence, reverse=True)
     return Locator(
         description=description or element.summary(),
+        role=element.role,
         frame_path=list(element.frame_path),
         scope=scope,
         candidates=candidates,

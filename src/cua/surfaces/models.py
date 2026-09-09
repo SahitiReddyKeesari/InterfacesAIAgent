@@ -49,6 +49,7 @@ class Strategy(str, Enum):
     LABEL_TEXT = "label_text"
     CONTROL_ID = "control_id"
     TEXT = "text"
+    COLUMN_CELL = "column_cell"
     ORDINAL = "ordinal"
 
 
@@ -85,6 +86,7 @@ class Locator(BaseModel):
     """
 
     description: str
+    role: Role | None = None
     frame_path: list[str] = Field(default_factory=list)
     scope: Scope | None = None
     candidates: list[Candidate]
@@ -101,6 +103,7 @@ class Element(BaseModel):
     name: str = ""
     value: str | None = None
     label_text: str | None = None
+    column_header: str | None = None
     control_id: str | None = None
     text: str | None = None
     enabled: bool = True
@@ -187,6 +190,49 @@ Action = Annotated[
     Union[Click, Fill, Select, Press, Navigate, Read, WaitFor],
     Field(discriminator="kind"),
 ]
+
+
+class Checkpoint(BaseModel):
+    """A predicate over what is currently perceivable.
+
+    Checkpoints are how a step proves it actually arrived, rather than assuming the
+    click worked. They are declarative so they can be recorded into an artifact and
+    re-evaluated on replay without a model, and they are evaluated by *observing* -
+    never by acting - so testing one can never change the state it is testing.
+
+    `text_absent` matters as much as `text_present`: reaching the confirmation screen
+    while an error banner is also on the page is not success.
+    """
+
+    description: str
+    text_present: list[str] = Field(default_factory=list)
+    text_absent: list[str] = Field(default_factory=list)
+    locator_present: list[Locator] = Field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not (self.text_present or self.text_absent or self.locator_present)
+
+
+class CheckResult(BaseModel):
+    """Why a checkpoint passed or failed, in enough detail to debug from."""
+
+    passed: bool
+    checkpoint: str
+    missing_text: list[str] = Field(default_factory=list)
+    forbidden_text: list[str] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+
+    def reason(self) -> str:
+        if self.passed:
+            return "checkpoint satisfied"
+        bits = []
+        if self.missing_text:
+            bits.append(f"expected text absent: {self.missing_text}")
+        if self.forbidden_text:
+            bits.append(f"forbidden text present: {self.forbidden_text}")
+        if self.unresolved:
+            bits.append(f"expected controls missing: {self.unresolved}")
+        return "; ".join(bits) or "checkpoint failed"
 
 
 class Resolution(BaseModel):

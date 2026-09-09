@@ -20,8 +20,8 @@ from typing import Any
 
 from playwright.sync_api import Frame, Page, TimeoutError as PWTimeout, sync_playwright
 
-from .models import (Action, ActionResult, Element, Locator, Observation, Resolution,
-                     Role, Strategy)
+from .models import (Action, ActionResult, CheckResult, Checkpoint, Element, Locator,
+                     Observation, Resolution, Role, Strategy)
 
 _JS = (Path(__file__).parent / "_inventory.js").read_text()
 
@@ -36,6 +36,7 @@ _ROLE_CSS = {
 }
 
 _INPUT_CSS = "input:not([type=hidden]), select, textarea"
+_READABLE = {Role.TEXT, Role.CELL}
 
 
 def _role(value: str) -> Role:
@@ -62,6 +63,7 @@ class PlaywrightSurface:
         # nothing has rendered differently yet, and no page-level load state changes.
         # Counting the request itself is the only signal that survives all three.
         self._pending_docs = 0
+        self._last_frame_miss: str | None = None
         self._page.on("request", self._on_request)
         self._page.on("requestfinished", self._on_request_done)
         self._page.on("requestfailed", self._on_request_done)
@@ -95,6 +97,10 @@ class PlaywrightSurface:
         for frame in self._page.frames:
             if self._frame_path(frame)[-1:] == path[-1:]:
                 return frame
+        # Nothing matched. Returning the top document here is a guess, and a locator
+        # that then fails looks like a missing control rather than a missing frame -
+        # so record it for the resolution detail.
+        self._last_frame_miss = "/".join(path)
         return self._page.main_frame
 
     # ----------------------------------------------------------------- observe
@@ -124,6 +130,7 @@ class PlaywrightSurface:
                     name=raw.get("name") or "",
                     value=raw.get("value"),
                     label_text=raw.get("label_text") or None,
+                    column_header=raw.get("column_header") or None,
                     control_id=raw.get("control_id") or None,
                     text=raw.get("text") or None,
                     enabled=bool(raw.get("enabled", True)),
@@ -227,18 +234,39 @@ class PlaywrightSurface:
                 best, best_key = row, key
         return best
 
-    def _try(self, root, candidate) -> Any:
+    def _try(self, root, candidate, role: Role | None = None) -> Any:
         strategy, value = candidate.strategy, candidate.value
         if strategy == Strategy.ROLE_NAME:
             role, _, name = value.partition(":")
             return root.get_by_role(role, name=name, exact=False)  # type: ignore[arg-type]
         if strategy == Strategy.LABEL_TEXT:
-            # The caption lives in a sibling cell; walk from it to the control.
+            # The caption lives in a sibling cell; walk from it to whatever it labels.
+            # For an input that is the control in the next cell; for a displayed value
+            # it is the next cell itself.
             escaped = value.replace('"', '\\"')
+            base = f'xpath=.//td[contains(normalize-space(.), "{escaped}")]/following-sibling::td[1]'
+            if role in _READABLE:
+                return root.locator(base)
             return root.locator(
-                f'xpath=.//td[contains(normalize-space(.), "{escaped}")]'
-                f'/following-sibling::td[1]//*[self::input or self::select or self::textarea]'
-            )
+                base + '//*[self::input or self::select or self::textarea]')
+        if strategy == Strategy.COLUMN_CELL:
+            # Resolve the column by its heading, then take that cell of the scoped row.
+            # Two steps rather than one selector, because a selector cannot express
+            # "the cell under the heading that says X".
+            try:
+                idx = root.evaluate(
+                    """(row, header) => {
+                        const table = row.closest('table');
+                        if (!table || !table.rows.length) return -1;
+                        const head = table.rows[0];
+                        for (let i = 0; i < head.cells.length; i++) {
+                            if (head.cells[i].textContent.trim() === header) return i;
+                        }
+                        return -1;
+                    }""", value)
+            except Exception:
+                return None
+            return None if idx < 0 else root.locator("td").nth(idx)
         if strategy == Strategy.CONTROL_ID:
             v = value.replace('"', '\\"')
             return root.locator(f'[id="{v}"], [name="{v}"]')
@@ -251,6 +279,7 @@ class PlaywrightSurface:
         return None
 
     def resolve(self, locator: Locator) -> Resolution:
+        self._last_frame_miss = None
         frame = self._frame_for(locator.frame_path)
         root = self._scoped(frame, locator)
         if root is None:
@@ -261,7 +290,7 @@ class PlaywrightSurface:
         fell: list[Strategy] = []
         for cand in locator.candidates:
             try:
-                found = self._try(root, cand)
+                found = self._try(root, cand, locator.role)
                 if found is None:
                     continue
                 n = found.count()
@@ -274,8 +303,10 @@ class PlaywrightSurface:
                                   fell_through=fell,
                                   detail=f"matched by {cand.strategy.value}")
             fell.append(cand.strategy)
+        miss = (f"; frame {self._last_frame_miss!r} was not present"
+                if self._last_frame_miss else "")
         return Resolution(resolved=False, matches=0, fell_through=fell,
-                          detail="no candidate resolved to exactly one control")
+                          detail="no candidate resolved to exactly one control" + miss)
 
     def _handle(self, locator: Locator):
         """The Playwright locator for the winning candidate, or None."""
@@ -286,7 +317,7 @@ class PlaywrightSurface:
         fell: list[Strategy] = []
         for cand in locator.candidates:
             try:
-                found = self._try(root, cand)
+                found = self._try(root, cand, locator.role)
                 if found is not None and found.count() == 1:
                     return found, Resolution(resolved=True, strategy=cand.strategy,
                                              confidence=cand.confidence, matches=1,
@@ -304,6 +335,10 @@ class PlaywrightSurface:
 
         if kind == "navigate":
             self._page.goto(action.url, wait_until="domcontentloaded")
+            # Child frames attach after the top document commits. Without settling here
+            # the next step resolves against a page whose frames do not exist yet, and
+            # silently falls back to the top document.
+            self._settle()
             return ActionResult(ok=True, detail=f"navigated to {action.url}")
 
         if kind == "press":
@@ -353,6 +388,20 @@ class PlaywrightSurface:
 
         return ActionResult(ok=True, resolution=res,
                             detail=f"{kind} via {res.strategy.value if res.strategy else '?'}")
+
+    # ------------------------------------------------------------- checkpoints
+    def check(self, checkpoint: Checkpoint) -> CheckResult:
+        obs = self.observe()
+        haystack = f"{obs.text_digest}\n{obs.title}"
+        missing = [t for t in checkpoint.text_present if t not in haystack]
+        forbidden = [t for t in checkpoint.text_absent if t in haystack]
+        unresolved = [loc.description for loc in checkpoint.locator_present
+                      if not self.resolve(loc).resolved]
+        return CheckResult(
+            passed=not (missing or forbidden or unresolved),
+            checkpoint=checkpoint.description,
+            missing_text=missing, forbidden_text=forbidden, unresolved=unresolved,
+        )
 
     # ---------------------------------------------------------------- evidence
     def capture(self, label: str) -> Path | None:
