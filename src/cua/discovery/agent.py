@@ -18,16 +18,16 @@ Two things here are worth more than the loop itself:
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from ..artifact.schema import (Capability, InputParam, OutputField, Provenance,
                                RiskClass, Step, SurfaceBinding)
 from ..evidence.recorder import RunRecorder
 from ..surfaces import locators
 from ..surfaces.base import Surface
-from ..surfaces.models import (Checkpoint, Click, Element, Fill, Navigate, Observation,
+from ..surfaces.models import (Checkpoint, Click, Fill, Navigate, Observation,
                                Read, Scope, Select)
 from .llm.base import LLMError, LLMProvider
 from .prompts import DECISION_SCHEMA, SYSTEM, render_observation
@@ -110,13 +110,14 @@ class DiscoveryAgent:
         for turn in range(1, config.max_steps + 1):
             observation = self.surface.observe()
             prompt = render_observation(observation, config.goal, history,
-                                        turn, config.max_steps)
+                                        turn, config.max_steps, config.parameters)
             self._transcript.append({"turn": turn, "screen": prompt})
             try:
                 decision = self.llm.complete_json(SYSTEM, prompt, DECISION_SCHEMA)
                 self._transcript[-1]["decision"] = decision
             except LLMError as exc:
                 self._log("model_error", str(exc), turn=turn)
+                self._save_transcript()
                 raise DiscoveryFailed(f"model failed at step {turn}: {exc}") from exc
 
             action_kind = decision.get("action", "")
@@ -129,6 +130,7 @@ class DiscoveryAgent:
                 history.append(f"declared done: {reasoning}")
                 break
             if action_kind == "give_up":
+                self._save_transcript()
                 raise DiscoveryFailed(f"model gave up at step {turn}: "
                                       f"{decision.get('note') or reasoning}")
 
@@ -157,18 +159,24 @@ class DiscoveryAgent:
                     description=reasoning or f"Value read at step {step.index}.",
                     source_step=step.index))
         else:
+            self._save_transcript()
             raise DiscoveryFailed(f"step budget of {config.max_steps} exhausted "
                                   f"without reaching the goal")
 
         capability = self._assemble(config, steps, outputs, success_text)
+        self._save_transcript()
         self._log("discovery_finished", capability.id,
                   steps=len(capability.steps), outputs=len(capability.outputs),
                   duration_ms=int((time.monotonic() - started) * 1000))
         if self.recorder is not None:
             self.recorder.attach("capability.json", capability.model_dump_json(indent=2))
-            self.recorder.attach("transcript.json",
-                                 __import__("json").dumps(self._transcript, indent=2))
         return capability
+
+    def _save_transcript(self) -> None:
+        """Write the model transcript. Called on every exit path - a run that failed is
+        exactly when someone needs to see what the model was looking at."""
+        if self.recorder is not None:
+            self.recorder.attach("transcript.json", json.dumps(self._transcript, indent=2))
 
     # -------------------------------------------------------------- assembly
     def _build_step(self, decision: dict, observation: Observation, index: int,
@@ -190,7 +198,15 @@ class DiscoveryAgent:
         locator = locators.build(element, decision.get("reasoning", "")[:80] or None,
                                  scope=scope, peers=observation.elements)
 
-        text = self._placeholder(decision.get("text"), config.parameters)
+        # The value is the caller's, never the model's. A model asked to "type the
+        # member number" may helpfully reformat or zero-pad it to match what it thinks
+        # a legacy field wants, and a value it adjusted no longer matches the caller's.
+        # It chooses the parameter; the value is substituted verbatim.
+        named = (decision.get("parameter") or "").strip()
+        if named in config.parameters:
+            text = "{" + named + "}"
+        else:
+            text = self._placeholder(decision.get("text"), config.parameters)
         intent = decision.get("reasoning", "").strip() or f"{kind} {locator.description}"
         risk = self._risk(decision.get("risk"))
         checkpoint = self._checkpoint(decision.get("checkpoint_text"), intent)

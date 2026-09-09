@@ -12,7 +12,7 @@ from cua.artifact.binding import REDACTED, BindingError, bind
 from cua.artifact.schema import (ApprovalState, Capability, InputParam, KnownOutcome,
                                  OutputField, ParamType, RiskClass, Step, SurfaceBinding)
 from cua.artifact.store import Store
-from cua.surfaces.models import (Candidate, Checkpoint, Click, Fill, Locator, Navigate,
+from cua.surfaces.models import (Candidate, Checkpoint, Fill, Locator, Navigate,
                                  Read, Role, Scope, Strategy)
 
 

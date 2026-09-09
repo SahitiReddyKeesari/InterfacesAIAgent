@@ -18,7 +18,6 @@ from __future__ import annotations
 from cua.artifact.schema import (ApprovalState, Capability, InputParam, KnownOutcome,
                                  OutputField, ParamType, Provenance, RecoverableCondition,
                                  RiskClass, Step, SurfaceBinding)
-from cua.artifact.store import Store
 from cua.surfaces import locators
 from cua.surfaces.models import (Checkpoint, Click, Fill, Navigate, Read, Role)
 from cua.surfaces.web import PlaywrightSurface

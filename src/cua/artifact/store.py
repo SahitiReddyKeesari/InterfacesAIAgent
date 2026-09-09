@@ -8,7 +8,6 @@ re-running discovery does not churn version numbers.
 """
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 

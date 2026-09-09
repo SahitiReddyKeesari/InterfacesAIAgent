@@ -209,3 +209,26 @@ def test_discovery_cannot_act_outside_the_allowlist(agent_for, base_url, srv):
     agent, _ = agent_for(HAPPY, policy=elsewhere)
     with pytest.raises(DiscoveryFailed, match="policy"):
         agent.run(config(base_url))
+
+
+def test_the_model_cannot_alter_a_caller_supplied_value(agent_for, base_url, srv):
+    """A real run failed exactly this way: the model zero-padded the member number to
+    what it guessed a legacy field wanted, and the search then matched nothing. The
+    model chooses which parameter; the value is the caller's, substituted verbatim."""
+    script = list(HAPPY)
+    script[0] = {"reasoning": "Enter the member number.", "action": "fill",
+                 "target": "Member / Name:", "parameter": "member_id",
+                 "text": "1234500000000000000000",   # the model's mangled version
+                 "risk": "safe"}
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    fill = next(s for s in capability.steps if s.action.kind == "fill")
+    assert fill.action.text == "{member_id}"
+    assert "00000" not in capability.model_dump_json()
+
+
+def test_the_prompt_names_the_available_parameters(agent_for, base_url, srv):
+    agent, guarded = agent_for(HAPPY)
+    agent.run(config(base_url))
+    assert "member_id" in agent.llm.prompts[0]
+    assert "never retype" in agent.llm.prompts[0]

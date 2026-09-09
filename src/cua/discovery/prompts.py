@@ -32,6 +32,11 @@ without you. Prefer a heading or a label over a value that will differ next time
 - Classify each action's `risk`: `safe` if nothing persists (reading, typing, \
 navigating), `consequential` if it writes something that another flow could undo, \
 `irreversible` if it cannot be undone through this application.
+- When typing a value the caller supplies, set `parameter` to that parameter's name \
+and leave `text` empty. The exact value is filled in for you. Do not retype, reformat, \
+pad or zero-fill it - the application is fussier than it looks, and a value you adjust \
+is a value that no longer matches the caller's.
+- Use `text` only for a literal you chose yourself, which is rare.
 - Use `read` to extract a value the caller asked for, and give it a short snake_case \
 `output_name`.
 - Answer `done` when the goal is complete, and set `success_text` to a phrase that \
@@ -51,8 +56,12 @@ DECISION_SCHEMA = {
                    "enum": ["fill", "click", "select", "read", "done", "give_up"]},
         "target_ref": {"type": "string",
                        "description": "Reference of the control to act on, e.g. main#7."},
+        "parameter": {"type": "string",
+                      "description": "Name of a caller-supplied parameter to type. "
+                                     "Preferred over `text` whenever one applies."},
         "text": {"type": "string",
-                 "description": "Value to type, or option to select."},
+                 "description": "A literal value to type or select, when no parameter "
+                                "applies. Never a reformatted parameter value."},
         "output_name": {"type": "string",
                         "description": "snake_case name for a value being read."},
         "scope_text": {"type": "string",
@@ -71,13 +80,18 @@ MAX_LISTED = 60
 
 
 def render_observation(observation: Observation, goal: str, history: list[str],
-                       step: int, budget: int) -> str:
+                       step: int, budget: int,
+                       parameters: dict[str, str] | None = None) -> str:
     """Compact the screen into something worth spending tokens on.
 
     Only visible, enabled, actionable-or-readable controls, capped - a full element dump
     of a legacy page is mostly layout scaffolding and crowds out the reasoning.
     """
     lines = [f"GOAL: {goal}", f"STEP {step} of at most {budget}", ""]
+    if parameters:
+        lines.append("VALUES THE CALLER SUPPLIES (use `parameter`, never retype these):")
+        lines += [f"  {name}" for name in parameters]
+        lines.append("")
     if history:
         lines += ["WHAT YOU HAVE DONE SO FAR:", *(f"  {h}" for h in history[-8:]), ""]
 

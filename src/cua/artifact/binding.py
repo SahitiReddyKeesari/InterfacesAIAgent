@@ -8,7 +8,6 @@ than by auditing every call site.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pydantic import BaseModel, Field
