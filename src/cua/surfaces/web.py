@@ -51,12 +51,10 @@ class PlaywrightSurface:
 
     name = "web"
 
-    def __init__(self, headless: bool = True, evidence_dir: Path | None = None,
-                 slow_mo: int = 0) -> None:
+    def __init__(self, headless: bool = True, slow_mo: int = 0) -> None:
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(headless=headless, slow_mo=slow_mo)
         self._page: Page = self._browser.new_page(viewport={"width": 1280, "height": 800})
-        self._evidence = evidence_dir
         self._shots = 0
         # Count in-flight *document* requests. A postback to a slow backend is a
         # pending navigation of an inner frame: the old document is still "loaded",
@@ -423,13 +421,12 @@ class PlaywrightSurface:
         )
 
     # ---------------------------------------------------------------- evidence
-    def capture(self, label: str) -> Path | None:
-        if self._evidence is None:
-            return None
-        self._evidence.mkdir(parents=True, exist_ok=True)
+    def capture(self, label: str, into: Path) -> Path | None:
+        into = Path(into)
+        into.mkdir(parents=True, exist_ok=True)
         self._shots += 1
         safe = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:48]
-        path = self._evidence / f"{self._shots:02d}-{safe}.png"
+        path = into / f"{self._shots:02d}-{safe}.png"
         self._page.screenshot(path=str(path), full_page=True)
         return path
 

@@ -37,8 +37,10 @@ class Surface(Protocol):
         """Evaluate a checkpoint by observing only. Never acts, so it is safe to call
         repeatedly and cannot disturb the state being verified."""
 
-    def capture(self, label: str) -> Path | None:
-        """Persist a richer signal for evidence (screenshot, snapshot, trace)."""
+    def capture(self, label: str, into: Path) -> Path | None:
+        """Persist a richer signal for evidence (screenshot, snapshot, trace) into the
+        given directory. The caller owns evidence layout; the surface only knows how to
+        produce the signal."""
 
     def close(self) -> None:
         ...

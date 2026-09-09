@@ -89,11 +89,11 @@ class PolicySurface:
         return result
 
     # ------------------------------------------------------------- evidence
-    def capture(self, label: str) -> Path | None:
+    def capture(self, label: str, into: Path) -> Path | None:
         """Screenshots cannot be scrubbed after the fact - a rendered value is pixels.
         Evidence capture is therefore a deliberate act by the caller, and the policy's
         answer to sensitive screens is not to capture them rather than to mask them."""
-        return self.inner.capture(label)
+        return self.inner.capture(label, into)
 
     def close(self) -> None:
         self.inner.close()
