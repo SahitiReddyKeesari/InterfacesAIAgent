@@ -1,0 +1,9 @@
+{
+  "run_id": "discovery-20260910T050459-5143f6",
+  "kind": "discovery",
+  "outcome": "success",
+  "duration_ms": 604318,
+  "events": 17,
+  "capability": "meridian.read_savings_balance",
+  "artifact": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/artifacts/meridian.read_savings_balance/v1.json"
+}

@@ -117,6 +117,13 @@
     return clean(head.cells[idx].textContent);
   };
 
+  const rowValues = (cell) => {
+    const row = cell.closest('tr');
+    if (!row) return [];
+    return Array.prototype.map.call(row.cells, (c) => clean(c.textContent))
+      .filter((t) => t && t.length <= 60);
+  };
+
   let readable = 0;
   for (const el of document.querySelectorAll('span[id], output[id], td, th')) {
     if (readable >= 300) break;
@@ -133,6 +140,7 @@
       value: content,
       label_text: captionFor(el),
       column_header: isCell ? headerFor(el) : '',
+      row_values: isCell ? rowValues(el) : [],
       control_id: el.id || '',
       text: content,
       enabled: true,

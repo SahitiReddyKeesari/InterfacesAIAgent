@@ -1,0 +1,277 @@
+{
+  "schema_version": "1.0",
+  "id": "meridian.read_savings_balance",
+  "version": 1,
+  "name": "meridian read savings balance",
+  "description": "Look up member 12345 and report the balance and status of their Savings account",
+  "surface": {
+    "kind": "policy(web)",
+    "entry_url": "http://127.0.0.1:8080/meridian/",
+    "tenant": null,
+    "variant": null
+  },
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "The member number to look up.",
+      "required": true,
+      "example": "12345",
+      "enum_values": null,
+      "pattern": null,
+      "sensitive": false
+    },
+    {
+      "name": "account_type",
+      "type": "string",
+      "description": "Which of the member's accounts to report on.",
+      "required": true,
+      "example": "Savings",
+      "enum_values": null,
+      "pattern": null,
+      "sensitive": false
+    }
+  ],
+  "outputs": [
+    {
+      "name": "value_4",
+      "type": "string",
+      "description": "I need to read the balance of the Savings account for member 12345.",
+      "sensitive": false,
+      "source_step": 4
+    },
+    {
+      "name": "value_5",
+      "type": "string",
+      "description": "I need to read the status of the Savings account for member 12345.",
+      "sensitive": false,
+      "source_step": 5
+    }
+  ],
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the application.",
+      "action": {
+        "kind": "navigate",
+        "url": "http://127.0.0.1:8080/meridian/"
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 1,
+      "intent": "I need to enter the member ID into the search box to look up the member.",
+      "action": {
+        "kind": "fill",
+        "locator": {
+          "description": "I need to enter the member ID into the search box to look up the member.",
+          "role": "textbox",
+          "frame_path": [
+            "main"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "label_text",
+              "value": "Member / Name:",
+              "confidence": 0.85,
+              "rationale": "caption in the adjacent table cell; this page associates no <label for> with its controls, so this is the field's only human-meaningful anchor"
+            },
+            {
+              "strategy": "control_id",
+              "value": "ctl00_ContentPlaceHolder1_txtMemberId",
+              "confidence": 0.35,
+              "rationale": "identifies a position, not a control: a segment of the id is an index; treated as positional until peers prove otherwise, which errs towards distrusting an id rather than towards selecting the wrong record; it will select the wrong record as soon as the list reorders"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "textbox:0",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        },
+        "text": "{member_id}",
+        "secret": false
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 2,
+      "intent": "I will click the Search link to submit the member ID and view the member details.",
+      "action": {
+        "kind": "click",
+        "locator": {
+          "description": "I will click the Search link to submit the member ID and view the member details",
+          "role": "link",
+          "frame_path": [
+            "main"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "role_name",
+              "value": "link:Search",
+              "confidence": 0.92,
+              "rationale": "role plus accessible name; survives markup changes and has a direct equivalent on desktop accessibility APIs"
+            },
+            {
+              "strategy": "control_id",
+              "value": "ctl00_ContentPlaceHolder1_btnSearch",
+              "confidence": 0.7,
+              "rationale": "server-generated id, stable while the control tree is unchanged, but opaque and not portable off this surface"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "link:0",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        }
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 3,
+      "intent": "I will click the Select link for member 12345 to view their account details.",
+      "action": {
+        "kind": "click",
+        "locator": {
+          "description": "I will click the Select link for member 12345 to view their account details.",
+          "role": "link",
+          "frame_path": [
+            "main"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "role_name",
+              "value": "link:Select",
+              "confidence": 0.92,
+              "rationale": "role plus accessible name; survives markup changes and has a direct equivalent on desktop accessibility APIs"
+            },
+            {
+              "strategy": "control_id",
+              "value": "ctl00_ContentPlaceHolder1_gvResults_ctl02_lnkSelect",
+              "confidence": 0.7,
+              "rationale": "server-generated id, stable while the control tree is unchanged, but opaque and not portable off this surface"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "link:2",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        }
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 4,
+      "intent": "I need to read the balance of the Savings account for member 12345.",
+      "action": {
+        "kind": "read",
+        "locator": {
+          "description": "I need to read the balance of the Savings account for member 12345.",
+          "role": "cell",
+          "frame_path": [
+            "main"
+          ],
+          "scope": {
+            "contains_text": "{account_type}",
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
+          },
+          "candidates": [
+            {
+              "strategy": "column_cell",
+              "value": "Current Balance",
+              "confidence": 0.88,
+              "rationale": "cell identified by its column heading; combined with a row scope this names the value rather than its coordinates, and column headings exist on desktop grids too"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "cell:16",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        },
+        "output": "value_4"
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 5,
+      "intent": "I need to read the status of the Savings account for member 12345.",
+      "action": {
+        "kind": "read",
+        "locator": {
+          "description": "I need to read the status of the Savings account for member 12345.",
+          "role": "cell",
+          "frame_path": [
+            "main"
+          ],
+          "scope": {
+            "contains_text": "8421.55",
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
+          },
+          "candidates": [
+            {
+              "strategy": "column_cell",
+              "value": "Status",
+              "confidence": 0.88,
+              "rationale": "cell identified by its column heading; combined with a row scope this names the value rather than its coordinates, and column headings exist on desktop grids too"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "cell:17",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        },
+        "output": "value_5"
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    }
+  ],
+  "success": {
+    "description": "Member Detail — 12345",
+    "text_present": [
+      "Member Detail — 12345"
+    ],
+    "text_absent": [],
+    "locator_present": []
+  },
+  "known_outcomes": [],
+  "recoverable": [],
+  "approval": "draft",
+  "provenance": {
+    "recorded_at": "2026-09-10T05:15:03.579602Z",
+    "goal": "Look up member 12345 and report the balance and status of their Savings account",
+    "model": "gemini-flash-lite-latest",
+    "run_id": "discovery-20260910T050459-5143f6",
+    "discovery_steps": 6,
+    "weakest_locator": 0.85
+  }
+}

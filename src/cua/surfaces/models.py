@@ -105,6 +105,7 @@ class Element(BaseModel):
     label_text: str | None = None
     column_header: str | None = None
     max_length: int | None = None     # what the control will actually accept
+    row_values: list[str] = Field(default_factory=list)   # for a grid cell, its row
     control_id: str | None = None
     text: str | None = None
     enabled: bool = True

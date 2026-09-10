@@ -333,3 +333,63 @@ def test_a_transient_model_outage_does_not_discard_the_run(agent_for, base_url, 
     capability = agent.run(cfg)
     assert agent.llm.failures == 1
     assert capability.validate_contract() == []
+
+
+def test_a_row_anchor_is_never_a_volatile_value(agent_for, base_url, srv):
+    """An earlier version anchored a Status cell to the balance beside it - a step that
+    breaks the next time the member spends anything. A caller-supplied value is
+    preferred, and a bare number is never chosen."""
+    script = [
+        {"reasoning": "Enter the member number.", "action": "fill",
+         "target": "Member / Name:", "parameter": "member_id", "text": ""},
+        {"reasoning": "Search.", "action": "click", "target": "Search",
+         "parameter": "none"},
+        {"reasoning": "Open the record.", "action": "click", "target": "Select",
+         "parameter": "none", "scope_text": "12345"},
+        {"reasoning": "Read the status.", "action": "read", "target": "Status",
+         "target_value": "Open", "parameter": "none"},
+        {"reasoning": "Done.", "action": "done", "parameter": "none",
+         "success_text": "Account Relationships"},
+    ]
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url, parameters={"member_id": "12345",
+                                                        "account_type": "Savings"}))
+    read = next(s for s in capability.steps if s.action.kind == "read")
+    assert read.action.locator.scope.contains_text == "{account_type}"
+
+
+def test_an_unnamed_output_is_named_from_its_column(agent_for, base_url, srv):
+    """`value_4` in a published contract is a contract nobody can read."""
+    script = [
+        {"reasoning": "Enter the member number.", "action": "fill",
+         "target": "Member / Name:", "parameter": "member_id", "text": ""},
+        {"reasoning": "Search.", "action": "click", "target": "Search", "parameter": "none"},
+        {"reasoning": "Open.", "action": "click", "target": "Select",
+         "parameter": "none", "scope_text": "12345"},
+        {"reasoning": "Read the balance.", "action": "read", "target": "Current Balance",
+         "target_value": "8421.55", "parameter": "none"},        # no output_name
+        {"reasoning": "Done.", "action": "done", "parameter": "none",
+         "success_text": "Account Relationships"},
+    ]
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url, parameters={"member_id": "12345",
+                                                        "account_type": "Savings"}))
+    assert [o.name for o in capability.outputs] == ["current_balance"]
+
+
+def test_the_success_phrase_is_parameterised(agent_for, base_url, srv):
+    """A success check naming the member it was recorded against fails for every other
+    member - which would make the capability worthless the first time it is reused."""
+    script = list(HAPPY)
+    script[-1] = {"reasoning": "Goal reached.", "action": "done", "parameter": "none",
+                  "success_text": "Member Detail — 12345"}
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    assert capability.success.text_present == ["Member Detail — {member_id}"]
+
+
+def test_the_recorded_surface_kind_is_not_a_wrapper_name(agent_for, base_url, srv):
+    """`policy(web)` is a description of our plumbing, not of the surface."""
+    agent, _ = agent_for(HAPPY)
+    capability = agent.run(config(base_url))
+    assert capability.surface.kind == "web"

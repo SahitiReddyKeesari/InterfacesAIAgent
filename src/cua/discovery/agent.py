@@ -19,6 +19,7 @@ Two things here are worth more than the loop itself:
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -63,6 +64,15 @@ class DiscoveryAgent:
         # transcript - a capability must be reviewable without reading the model's
         # deliberations - but a discovery run has to be able to show its working.
         self._transcript: list[dict] = []
+        self._output_names: set[str] = set()
+
+    def _unique_output(self, name: str) -> str:
+        """Two reads of the same column must not collide into one output."""
+        candidate, n = name, 2
+        while candidate in self._output_names:
+            candidate, n = f"{name}_{n}", n + 1
+        self._output_names.add(candidate)
+        return candidate
 
     # ---------------------------------------------------------------- helpers
     def _log(self, kind: str, message: str = "", **data) -> None:
@@ -84,14 +94,33 @@ class DiscoveryAgent:
         """A grid cell identified by its column still needs a row to look in.
 
         The row is visible at record time, so the anchor is derived from what was
-        perceived - the value in the neighbouring cell - rather than depending on the
-        model to think of supplying one. It is then parameterised like any other value,
-        so "the Current Balance cell of the Savings row" becomes "...of the
-        {account_type} row" for free.
+        perceived rather than depending on the model to supply one. Which value in the
+        row is chosen matters enormously:
+
+        * A value the caller parameterises is best - it is stable *and* it makes the
+          step reusable, so "the Current Balance cell of the Savings row" records as
+          "...of the {account_type} row".
+        * Failing that, prefer something that is not a number. An earlier version took
+          whichever cell sat to the left, and anchored a Status cell to a *balance* -
+          a step that would break the next time the member spent any money.
         """
         if element.role is not Role.CELL or not element.column_header:
             return None
-        anchor = (element.label_text or "").strip()
+
+        own = (element.value or "").strip()
+        candidates = [v.strip() for v in element.row_values
+                      if v.strip() and v.strip() != own]
+        if not candidates and element.label_text:
+            candidates = [element.label_text.strip()]
+
+        for name, example in parameters.items():
+            if str(example) in candidates:
+                self._log("derived_scope", f"{{{name}}}", column=element.column_header,
+                          note="row anchored to a caller-supplied value")
+                return "{" + name + "}"
+
+        stable = [v for v in candidates if not _VOLATILE.fullmatch(v)]
+        anchor = next(iter(stable or candidates), "")
         if not anchor or anchor == element.column_header:
             return None
         self._log("derived_scope", anchor, column=element.column_header)
@@ -273,8 +302,14 @@ class DiscoveryAgent:
         elif kind == "click":
             action = Click(locator=locator)
         elif kind == "read":
-            name = (decision.get("output_name") or f"value_{index}").strip()
-            action = Read(locator=locator, output=name)
+            # A model that forgets to name an output should not leave `value_4` in a
+            # published contract - the column heading is right there, and is what a
+            # caller would call it anyway.
+            name = (decision.get("output_name") or "").strip()
+            if not name:
+                name = _snake(element.column_header or element.label_text
+                              or f"value_{index}")
+            action = Read(locator=locator, output=self._unique_output(_snake(name)))
         else:
             return None
 
@@ -300,6 +335,10 @@ class DiscoveryAgent:
 
     def _assemble(self, config: DiscoveryConfig, steps: list[Step],
                   outputs: list[OutputField], success_text: str | None) -> Capability:
+        # The model describes success using the values it happened to see, so the
+        # phrase must be parameterised too - otherwise replaying for a different member
+        # fails a success check that names the one it was recorded against.
+        success_text = self._placeholder(success_text, config.parameters)
         success = Checkpoint(
             description=success_text or f"The goal was reached: {config.goal}",
             text_present=[success_text] if success_text else [])
@@ -332,7 +371,7 @@ class DiscoveryAgent:
             id=config.capability_id,
             name=config.name or config.capability_id.replace(".", " ").replace("_", " "),
             description=config.description or config.goal,
-            surface=SurfaceBinding(kind=getattr(self.surface, "name", "web"),
+            surface=SurfaceBinding(kind=_base_surface_name(self.surface),
                                    entry_url=config.entry_url),
             inputs=kept, outputs=outputs, steps=steps, success=success,
             provenance=Provenance(goal=config.goal,
@@ -340,6 +379,21 @@ class DiscoveryAgent:
                                   run_id=self.recorder.run_id if self.recorder else None,
                                   discovery_steps=len(steps),
                                   weakest_locator=weakest))
+
+
+# Values that change on their own - amounts, balances, dates. Never a row anchor.
+_VOLATILE = re.compile(r"[\d.,$%/\-]+")
+
+
+def _snake(text: str) -> str:
+    return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", text.lower())).strip("_") or "value"
+
+
+def _base_surface_name(surface) -> str:
+    """The innermost surface's name - wrappers describe policy, not the surface kind."""
+    while hasattr(surface, "inner"):
+        surface = surface.inner
+    return getattr(surface, "name", "web")
 
 
 def _placeholders_in(step: Step) -> set[str]:
