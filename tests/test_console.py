@@ -168,3 +168,56 @@ def test_an_intervention_can_be_claimed_and_released(console):
                        {"id": request.id, "notes": "cleared the error page"})
     assert released["state"] == "released"
     assert released["operator_notes"] == "cleared the error page"
+
+
+# ------------------------------------------------------- discovery from the UI
+def test_discovery_can_be_started_and_polled_without_blocking(console, srv,
+                                                              monkeypatch, base_url):
+    """The Assistant tab starts a discovery run and narrates it while it works.
+
+    Stubbed model on purpose: this test is about the wiring - that the request returns
+    at once, that the run's own evidence is the progress feed, and that a finished run
+    leaves a saved capability - not about whether a model can drive a screen, which the
+    real run in /evidence proves.
+    """
+    import time
+
+    from tests.test_discovery import HAPPY, ScriptedProvider
+
+    monkeypatch.setattr("cua.config.provider", lambda name=None: ScriptedProvider(HAPPY))
+
+    status, started = post(console, "/api/discover", {
+        "capability_id": "console.smoke",
+        "url": base_url + "/meridian/",
+        "goal": "Look up a member and read their name",
+        "params": {"member_id": "12345"},
+        "max_steps": 8,
+    })
+    assert status == 200
+    assert started["run_id"] and started["done"] is False   # returned immediately
+
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        _, state = get(console, f"/api/discover/{started['run_id']}")
+        if state["done"]:
+            break
+        time.sleep(1)
+
+    assert state["done"], "discovery never finished"
+    assert state["ok"], state.get("error")
+    assert any(e["kind"] == "acted" for e in state["events"]), "no progress to narrate"
+
+    _, caps = get(console, "/api/capabilities")
+    assert any(c["id"] == "console.smoke" for c in caps), "the capability was not saved"
+
+
+def test_a_second_run_is_refused_while_one_is_in_flight(console):
+    """One browser against one target. A second concurrent run would produce results
+    neither run could explain."""
+    from pathlib import Path
+
+    from cua.console.server import ConsoleState, _start_discovery
+
+    state = ConsoleState(Path("artifacts"), Path("evidence"), Path("evidence/interventions"))
+    state.busy = True
+    assert "already in progress" in _start_discovery(state, {"capability_id": "x"})["error"]
