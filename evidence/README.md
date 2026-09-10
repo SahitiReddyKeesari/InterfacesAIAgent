@@ -34,10 +34,27 @@ Two events show guards firing on a live model, not on a contrived test:
   anchored a Status cell to the *balance* beside it — a step that breaks the next time
   the member spends anything.
 
-## A visible limit
+## Outcomes were derived, not declared
 
-Replaying the **discovered** artifact with `member_id=99999` returns a `hard_failure`,
-not `member_not_found`. Discovery records the happy path; known business outcomes are
-declared, and this artifact has none. The hand-recorded capability
-(`meridian.read_account_balance`) declares them, which is why the same input is a
-business outcome there. Deriving them automatically is the first item in `REPORT.md` §7.
+A discovery run records the happy path, so the artifact it produced (v1) could not tell
+"no such member" from a broken application - `member_id=99999` returned `hard_failure`.
+
+`cua probe` closed that without a model. It replays the recorded plan twice, once with
+arguments that succeed and once with arguments chosen to provoke the outcome, and takes
+whatever the application said the second time and not the first:
+
+```
+cua probe meridian.read_savings_balance \
+  --good member_id=12345 --good account_type=Savings \
+  --bad  member_id=99999 --bad  account_type=Savings \
+  --name member_not_found --describe "No member matches the supplied number."
+```
+
+```
+signature: ['No member records match the criteria entered.']
+```
+
+That became **v2**, and the same input now returns `member_not_found`. The happy path is
+unaffected. Deliberately no model is involved: a signature invented by an LLM would be
+the hallucinated-checkpoint problem in a new costume - and the discovery log in this
+directory shows one of those being caught.

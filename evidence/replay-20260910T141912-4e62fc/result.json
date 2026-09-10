@@ -1,8 +1,8 @@
 {
   "outcome": "business_outcome",
-  "capability_id": "meridian.read_account_balance",
-  "version": 1,
-  "fingerprint": "beb20adef9f98114",
+  "capability_id": "meridian.read_savings_balance",
+  "version": 2,
+  "fingerprint": "387e6921c38de081",
   "outputs": {},
   "business_outcome": "member_not_found",
   "business_detail": "No member matches the supplied number. A legitimate answer for the caller, not a failure of the automation.",
@@ -16,7 +16,7 @@
   "steps": [
     {
       "index": 0,
-      "intent": "Open the servicing application.",
+      "intent": "Open the application.",
       "action": "navigate",
       "ok": true,
       "strategy": null,
@@ -26,7 +26,7 @@
     },
     {
       "index": 1,
-      "intent": "Enter the member number to search for.",
+      "intent": "I need to enter the member ID into the search box to find the member's profile.",
       "action": "fill",
       "ok": true,
       "strategy": "label_text",
@@ -36,26 +36,26 @@
     },
     {
       "index": 2,
-      "intent": "Run the member search.",
+      "intent": "I will click the Search link to submit the member ID lookup.",
       "action": "click",
       "ok": true,
       "strategy": "role_name",
       "confidence": 0.92,
-      "checkpoint_passed": true,
+      "checkpoint_passed": null,
       "detail": "click via role_name"
     },
     {
       "index": 3,
-      "intent": "Open the matching member's record.",
+      "intent": "I will click the Select link corresponding to the member 12345 row to open their profile.",
       "action": "click",
       "ok": false,
       "strategy": null,
       "confidence": 0.0,
-      "checkpoint_passed": false,
-      "detail": "could not locate 'Select link for the requested member'"
+      "checkpoint_passed": null,
+      "detail": "could not locate 'I will click the Select link corresponding to the member 12345 row to open their'"
     }
   ],
-  "run_id": "replay-20260909T230148-2b0f1b",
-  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260909T230148-2b0f1b",
-  "duration_ms": 3537
+  "run_id": "replay-20260910T141912-4e62fc",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260910T141912-4e62fc",
+  "duration_ms": 2125
 }
