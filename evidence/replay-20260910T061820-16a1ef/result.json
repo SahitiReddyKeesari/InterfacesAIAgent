@@ -1,12 +1,11 @@
 {
   "outcome": "success",
-  "capability_id": "meridian.read_account_balance",
+  "capability_id": "meridian.read_savings_balance",
   "version": 1,
-  "fingerprint": "beb20adef9f98114",
+  "fingerprint": "6578e89d42cf0462",
   "outputs": {
-    "member_name": "Maeve Millay",
-    "balance": "25000.00",
-    "account_status": "Matured"
+    "current_balance": "25000.00",
+    "status": "Matured"
   },
   "business_outcome": null,
   "business_detail": "",
@@ -20,7 +19,7 @@
   "steps": [
     {
       "index": 0,
-      "intent": "Open the servicing application.",
+      "intent": "Open the application.",
       "action": "navigate",
       "ok": true,
       "strategy": null,
@@ -30,7 +29,7 @@
     },
     {
       "index": 1,
-      "intent": "Enter the member number to search for.",
+      "intent": "I need to enter the member ID into the search box to find the member's profile.",
       "action": "fill",
       "ok": true,
       "strategy": "label_text",
@@ -40,37 +39,27 @@
     },
     {
       "index": 2,
-      "intent": "Run the member search.",
+      "intent": "I will click the Search link to submit the member ID lookup.",
       "action": "click",
       "ok": true,
       "strategy": "role_name",
       "confidence": 0.92,
-      "checkpoint_passed": true,
+      "checkpoint_passed": null,
       "detail": "click via role_name"
     },
     {
       "index": 3,
-      "intent": "Open the matching member's record.",
+      "intent": "I will click the Select link corresponding to the member 12345 row to open their profile.",
       "action": "click",
       "ok": true,
       "strategy": "role_name",
       "confidence": 0.92,
-      "checkpoint_passed": true,
+      "checkpoint_passed": null,
       "detail": "click via role_name"
     },
     {
       "index": 4,
-      "intent": "Read the member's name for the caller.",
-      "action": "read",
-      "ok": true,
-      "strategy": "label_text",
-      "confidence": 0.85,
-      "checkpoint_passed": null,
-      "detail": ""
-    },
-    {
-      "index": 5,
-      "intent": "Read the balance of the requested account.",
+      "intent": "I need to read the balance of the Savings account from the Savings row.",
       "action": "read",
       "ok": true,
       "strategy": "column_cell",
@@ -79,8 +68,8 @@
       "detail": ""
     },
     {
-      "index": 6,
-      "intent": "Read the status of the requested account.",
+      "index": 5,
+      "intent": "I need to read the status of the Savings account from the Savings row now.",
       "action": "read",
       "ok": true,
       "strategy": "column_cell",
@@ -89,7 +78,7 @@
       "detail": ""
     }
   ],
-  "run_id": "replay-20260909T230144-3d76ad",
-  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260909T230144-3d76ad",
-  "duration_ms": 4270
+  "run_id": "replay-20260910T061820-16a1ef",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260910T061820-16a1ef",
+  "duration_ms": 2927
 }

@@ -1,9 +1,0 @@
-{
-  "run_id": "replay-20260909T230144-3d76ad",
-  "kind": "replay",
-  "outcome": "success",
-  "duration_ms": 4271,
-  "events": 13,
-  "summary": "success: member_name=Maeve Millay, balance=25000.00, account_status=Matured",
-  "weak_steps": []
-}

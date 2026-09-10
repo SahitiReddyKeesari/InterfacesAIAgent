@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260910T061824-326bc7",
+  "kind": "replay",
+  "outcome": "hard_failure",
+  "duration_ms": 1509,
+  "events": 8,
+  "summary": "hard_failure at step 3: step 3 (I will click the Select link corresponding to the member 12345 row to open their profile.) did not complete\n  expected: the click to succeed\n  observed: could not locate 'I will click the Select link corresponding to the member 12345 row to open their'",
+  "weak_steps": []
+}

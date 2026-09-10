@@ -36,14 +36,14 @@
     {
       "name": "current_balance",
       "type": "string",
-      "description": "I need to read the balance of the Savings account from the member's account relationships table.",
+      "description": "I need to read the balance of the Savings account from the Savings row.",
       "sensitive": false,
       "source_step": 4
     },
     {
       "name": "status",
       "type": "string",
-      "description": "I need to read the status of the Savings account from the member's account relationships table.",
+      "description": "I need to read the status of the Savings account from the Savings row now.",
       "sensitive": false,
       "source_step": 5
     }
@@ -63,11 +63,11 @@
     },
     {
       "index": 1,
-      "intent": "I need to enter the member ID into the search box to look up the member.",
+      "intent": "I need to enter the member ID into the search box to find the member's profile.",
       "action": {
         "kind": "fill",
         "locator": {
-          "description": "I need to enter the member ID into the search box to look up the member.",
+          "description": "I need to enter the member ID into the search box to find the member's profile.",
           "role": "textbox",
           "frame_path": [
             "main"
@@ -97,25 +97,18 @@
         "text": "{member_id}",
         "secret": false
       },
-      "checkpoint": {
-        "description": "After: I need to enter the member ID into the search box to look up the member.",
-        "text_present": [
-          "Member Summary"
-        ],
-        "text_absent": [],
-        "locator_present": []
-      },
+      "checkpoint": null,
       "risk": "safe",
       "optional": false,
       "notes": ""
     },
     {
       "index": 2,
-      "intent": "Click the Search link to execute the member lookup.",
+      "intent": "I will click the Search link to submit the member ID lookup.",
       "action": {
         "kind": "click",
         "locator": {
-          "description": "Click the Search link to execute the member lookup.",
+          "description": "I will click the Search link to submit the member ID lookup.",
           "role": "link",
           "frame_path": [
             "main"
@@ -150,16 +143,19 @@
     },
     {
       "index": 3,
-      "intent": "Click the Select link for member 12345 to view their account details.",
+      "intent": "I will click the Select link corresponding to the member 12345 row to open their profile.",
       "action": {
         "kind": "click",
         "locator": {
-          "description": "Click the Select link for member 12345 to view their account details.",
+          "description": "I will click the Select link corresponding to the member 12345 row to open their",
           "role": "link",
           "frame_path": [
             "main"
           ],
-          "scope": null,
+          "scope": {
+            "contains_text": "{member_id}",
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
+          },
           "candidates": [
             {
               "strategy": "role_name",
@@ -189,11 +185,11 @@
     },
     {
       "index": 4,
-      "intent": "I need to read the balance of the Savings account from the member's account relationships table.",
+      "intent": "I need to read the balance of the Savings account from the Savings row.",
       "action": {
         "kind": "read",
         "locator": {
-          "description": "I need to read the balance of the Savings account from the member's account rela",
+          "description": "I need to read the balance of the Savings account from the Savings row.",
           "role": "cell",
           "frame_path": [
             "main"
@@ -226,11 +222,11 @@
     },
     {
       "index": 5,
-      "intent": "I need to read the status of the Savings account from the member's account relationships table.",
+      "intent": "I need to read the status of the Savings account from the Savings row now.",
       "action": {
         "kind": "read",
         "locator": {
-          "description": "I need to read the status of the Savings account from the member's account relat",
+          "description": "I need to read the status of the Savings account from the Savings row now.",
           "role": "cell",
           "frame_path": [
             "main"
@@ -263,9 +259,9 @@
     }
   ],
   "success": {
-    "description": "Member Detail — {member_id}",
+    "description": "{account_type}",
     "text_present": [
-      "Member Detail — {member_id}"
+      "{account_type}"
     ],
     "text_absent": [],
     "locator_present": []
@@ -274,10 +270,10 @@
   "recoverable": [],
   "approval": "draft",
   "provenance": {
-    "recorded_at": "2026-09-10T05:35:40.950249Z",
+    "recorded_at": "2026-09-10T06:16:35.003079Z",
     "goal": "Look up member 12345 and report the balance and status of their Savings account",
     "model": "gemini-flash-lite-latest",
-    "run_id": "discovery-20260910T052158-507b41",
+    "run_id": "discovery-20260910T054418-2c88a7",
     "discovery_steps": 6,
     "weakest_locator": 0.85
   }
