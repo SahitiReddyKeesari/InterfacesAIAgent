@@ -88,7 +88,20 @@ curl -XPOST localhost:8080/__control/fault -d '{"name":"server_error"}'   # a ha
 curl -XPOST localhost:8080/__control/fault -d '{"name":"session_timeout"}' # recovered automatically
 ```
 
-**6. See it as a calling agent would** — JSON Schema for tool-calling:
+**6. Teach it an outcome it did not discover** — no model involved:
+
+```bash
+cua probe meridian.read_savings_balance \
+  --good member_id=12345 --good account_type=Savings \
+  --bad  member_id=99999 --bad  account_type=Savings \
+  --name member_not_found --describe "No member matches the supplied number."
+```
+
+Replays the plan twice and records whatever the application said the second time and not
+the first. The unknown member then comes back as `member_not_found` rather than as a
+failure.
+
+**7. See it as a calling agent would** — JSON Schema for tool-calling:
 
 ```bash
 cua catalog
@@ -109,6 +122,19 @@ provider in place of a model:
 ```bash
 pytest -q
 ```
+
+## Approving a capability for unattended use
+
+A capability starts as a `draft`. Approval is a deliberate act, and it refuses when the
+contract is self-inconsistent — an irreversible plan with no declared outcomes, an input
+nothing references, a success condition that asserts nothing:
+
+```bash
+cua approve meridian.read_savings_balance
+```
+
+A policy can then require an approved artifact before it will run anything unattended,
+and irreversible steps still need explicit approval on top of that.
 
 ## Human escalation
 

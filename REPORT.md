@@ -221,16 +221,26 @@ resolution is reported rather than silently tolerated.
   divergent text as a signature — a cheap, obvious next step I ran out of time for.
 - **Queues, workers, retries across processes.** Explicitly not rewarded.
 
+**Built after the first pass, because the gap was visible in the evidence:**
+
+**Outcome probing** (`cua probe`). A discovered artifact knew only the happy path, so an
+unknown member came back as a hard failure rather than as `member_not_found`. Probing
+replays the plan twice - once with arguments that succeed, once with arguments chosen to
+provoke the condition - and records whatever the application said the second time and
+not the first. Candidates come from perceived elements rather than flattened page text,
+so a message arrives as one string; they are then ranked so that the application *saying*
+something (a sentence, or better a condition code like `SEC-0917`) outranks a row count
+or a field caption that merely happened to differ. No model is involved, deliberately: a
+signature invented by an LLM is the hallucinated-checkpoint failure in a new costume.
+
 **What I would build next, in order:**
 
-1. **Outcome probing**, as above — it removes the one place the artifact still depends on
-   someone declaring something by hand.
-2. **Per-tenant overrides**, since the schema already reserves the fields and `weak_steps`
+1. **Per-tenant overrides**, since the schema already reserves the fields and `weak_steps`
    already provides the drift signal that should trigger creating one.
-3. **A second surface implementation** — a desktop app via the macOS AX API. Everything
+2. **A second surface implementation** — a desktop app via the macOS AX API. Everything
    about §4 is an argument until that exists, and it is the fastest way to find out which
    parts of the seam are honest.
-4. **Multi-run stability scoring**, replaying N times and gating unattended approval on it;
+3. **Multi-run stability scoring**, replaying N times and gating unattended approval on it;
    the approval state and the weak-step signal are both already in place to hang it on.
 
 **What I would change with hindsight:** `frame_path` should have been a generic
