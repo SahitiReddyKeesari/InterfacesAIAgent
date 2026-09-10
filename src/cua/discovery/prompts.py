@@ -7,7 +7,7 @@ says has to survive being replayed against a surface that may not be a browser a
 """
 from __future__ import annotations
 
-from ..surfaces.models import Observation
+from ..surfaces.models import Observation, Role
 
 SYSTEM = """\
 You are operating a back-office business application on behalf of a bank employee, by \
@@ -119,10 +119,17 @@ def render_observation(observation: Observation, goal: str, history: list[str],
     for element in observation.elements:
         if not element.enabled or shown >= MAX_LISTED:
             continue
-        label = element.name or element.label_text or element.column_header or ""
+        # A grid cell is named by its column, and located by its row - which is how a
+        # person reads a table. Labelling it with the neighbouring cell's value instead
+        # is both confusing and, for a read, the wrong anchor entirely.
+        in_grid = element.column_header and element.role is Role.CELL
+        label = (element.column_header if in_grid
+                 else element.name or element.label_text or "")
         descriptor = f"  {element.ref}  {element.role.value}"
         if label:
             descriptor += f"  {label!r}"
+        if in_grid and element.label_text:
+            descriptor += f"  [row: {element.label_text[:30]}]"
         if element.value and element.value != label:
             descriptor += f"  = {element.value[:60]!r}"
         lines.append(descriptor)

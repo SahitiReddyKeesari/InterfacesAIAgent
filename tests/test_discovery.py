@@ -37,10 +37,17 @@ class ScriptedProvider:
             raise LLMError("script exhausted")
         decision = dict(self.script.pop(0))
         wanted = decision.pop("target", None)
+        # Optional, for controls whose caption repeats (a column heading appears once
+        # per row): pick the line that also shows this value.
+        value = decision.pop("target_value", None)
         if wanted:
-            match = re.search(rf"^\s*(\S+)\s+\w+\s+'{re.escape(wanted)}'", user, re.M)
+            pattern = rf"^\s*(\S+)\s+\w+\s+'{re.escape(wanted)}'.*"
+            if value:
+                pattern += rf"'{re.escape(value)}'"
+            match = re.search(pattern, user, re.M)
             if not match:
-                raise AssertionError(f"no control captioned {wanted!r} on screen:\n{user[:800]}")
+                raise AssertionError(
+                    f"no control captioned {wanted!r} on screen:\n{user[:800]}")
             decision["target_ref"] = match.group(1)
         return decision
 
@@ -277,3 +284,29 @@ def test_field_capacity_is_perceived(surface, base_url):
     field = next(e for e in surface.observe().elements
                  if e.role is Role.TEXTBOX and (e.label_text or "").startswith("Member"))
     assert field.max_length == 32
+
+
+def test_a_grid_cell_read_gets_a_row_scope_without_the_model_supplying_one(
+        agent_for, base_url, srv):
+    """A column-based locator needs a row to look in. The row is visible at record
+    time, so the anchor is derived from perception rather than hoped for."""
+    script = [
+        {"reasoning": "Enter the member number.", "action": "fill",
+         "target": "Member / Name:", "parameter": "member_id", "text": ""},
+        {"reasoning": "Search.", "action": "click", "target": "Search",
+         "parameter": "none", "checkpoint_text": "Search Results"},
+        {"reasoning": "Open the record.", "action": "click", "target": "Select",
+         "parameter": "none", "scope_text": "12345", "checkpoint_text": "Member Detail"},
+        {"reasoning": "Read the balance.", "action": "read",
+         "target": "Current Balance", "target_value": "8421.55",
+         "parameter": "none", "output_name": "balance"},   # deliberately no scope_text
+        {"reasoning": "Done.", "action": "done", "parameter": "none",
+         "success_text": "Account Relationships"},
+    ]
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url, parameters={"member_id": "12345",
+                                                        "account_type": "Savings"}))
+    read = next(s for s in capability.steps if s.action.kind == "read")
+    assert read.action.locator.scope is not None, "the read needs a row anchor"
+    # And the anchor is parameterised, so one recording serves every account type.
+    assert read.action.locator.scope.contains_text == "{account_type}"

@@ -79,7 +79,8 @@ class GeminiProvider:
         }
 
         last = "no attempt made"
-        for model in self._candidates:
+        unavailable: list[str] = []
+        for model in list(self._candidates):
             for attempt in range(self.max_attempts):
                 try:
                     response = self._client.post(
@@ -90,12 +91,22 @@ class GeminiProvider:
                 else:
                     if response.status_code == 200:
                         self.model = model         # remember what works
+                        for dead in unavailable:
+                            if len(self._candidates) > 1:
+                                self._candidates.remove(dead)
                         return self._parse(response.json())
                     last = f"{model}: HTTP {response.status_code} {response.text[:160]}"
                     if response.status_code not in _RETRYABLE:
-                        break                      # a real rejection - try next model
+                        # A model this key cannot use will never become usable. Retrying
+                        # it on every later call wastes the run's time budget on a
+                        # certainty - some models are closed to newer keys.
+                        unavailable.append(model)
+                        break
                 # Exponential backoff with jitter, so parallel runs do not resonate.
                 time.sleep(min(2 ** attempt + random.random(), 20))
+        for model in unavailable:
+            if len(self._candidates) > 1:
+                self._candidates.remove(model)
         raise LLMError(f"no model produced a decision; last error: {last}")
 
     def _parse(self, body: dict) -> dict:

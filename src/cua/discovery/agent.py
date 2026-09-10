@@ -27,8 +27,8 @@ from ..artifact.schema import (Capability, InputParam, OutputField, Provenance,
 from ..evidence.recorder import RunRecorder
 from ..surfaces import locators
 from ..surfaces.base import Surface
-from ..surfaces.models import (Checkpoint, Click, Fill, Navigate, Observation,
-                               Read, Scope, Select)
+from ..surfaces.models import (Checkpoint, Click, Element, Fill, Navigate,
+                               Observation, Read, Role, Scope, Select)
 from .llm.base import LLMError, LLMProvider
 from .prompts import NO_PARAMETER, SYSTEM, decision_schema, render_observation
 
@@ -76,6 +76,23 @@ class DiscoveryAgent:
             if example and str(example) in value:
                 value = value.replace(str(example), "{" + name + "}")
         return value
+
+    def _derived_scope(self, element: Element, parameters: dict[str, str]) -> str | None:
+        """A grid cell identified by its column still needs a row to look in.
+
+        The row is visible at record time, so the anchor is derived from what was
+        perceived - the value in the neighbouring cell - rather than depending on the
+        model to think of supplying one. It is then parameterised like any other value,
+        so "the Current Balance cell of the Savings row" becomes "...of the
+        {account_type} row" for free.
+        """
+        if element.role is not Role.CELL or not element.column_header:
+            return None
+        anchor = (element.label_text or "").strip()
+        if not anchor or anchor == element.column_header:
+            return None
+        self._log("derived_scope", anchor, column=element.column_header)
+        return self._placeholder(anchor, parameters)
 
     @staticmethod
     def _risk(raw: str | None) -> RiskClass:
@@ -190,6 +207,8 @@ class DiscoveryAgent:
             return None
 
         scope_text = self._placeholder(decision.get("scope_text"), config.parameters)
+        if not scope_text:
+            scope_text = self._derived_scope(element, config.parameters)
         scope = (Scope(contains_text=scope_text,
                        rationale="identifies the row by a value it displays rather than "
                                  "by its position, chosen during discovery")
