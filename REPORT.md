@@ -170,9 +170,16 @@ headed browser and no adapter is present. The same seam takes an operator consol
 the session on a person's behalf, or a scripted remediation for a condition a team has
 chosen to automate.
 
-**Mocked deliberately:** the operator console is a CLI (`cua operator list/take/release`).
-The brief puts real-time co-browsing out of scope. The control-transfer protocol, the
+**Mocked deliberately:** real-time co-browsing is out of scope per the brief. There are
+two operator surfaces, both thin: a CLI (`cua operator list/take/release`) and a browser
+console (`cua console`) that lists waiting interventions with their context and lets a
+person take control and hand it back. Neither streams the session - the human works the
+headed browser the run is already driving. The control-transfer protocol, the
 single-holder guarantee, the resume signal and the change record are all real.
+
+The console needs no Node and no build step: React is vendored and the server is the
+standard library. That was a deliberate constraint - a repo whose only prerequisites are
+Python and a JDK should not acquire a JavaScript toolchain for an optional view.
 
 ## 6. Safety
 

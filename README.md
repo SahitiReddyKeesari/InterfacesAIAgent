@@ -123,6 +123,26 @@ provider in place of a model:
 pytest -q
 ```
 
+## Operator console (optional)
+
+If you would rather not use the terminal:
+
+```bash
+cua console          # then open http://127.0.0.1:8765
+```
+
+Browse saved capabilities as a calling agent sees them, run a replay with typed inputs,
+read any run's structured log and failure screenshots, and take control of a paused
+session during an escalation.
+
+It needs **no Node, no npm and no build step** — React is vendored under
+`src/cua/console/vendor/`, the markup uses htm's tagged templates rather than JSX, and
+the server is the standard library. The CLI remains the documented path; this exists
+because two things are genuinely awkward from a terminal: comparing capability contracts,
+and taking over a live session under time pressure. Every endpoint calls the same code
+the CLI does — there is no second implementation of replay, policy or the intervention
+protocol.
+
 ## Approving a capability for unattended use
 
 A capability starts as a `draft`. Approval is a deliberate act, and it refuses when the
@@ -166,6 +186,7 @@ src/cua/
   safety/       allowlist policy, redaction, and the enforcing surface wrapper
   escalation/   control transfer, the intervention queue, the operator seam
   evidence/     structured run records
+  console/      optional browser console (vendored React, no build step)
 mock/           the target application (Java, no framework) — a declared stand-in
 artifacts/      saved capabilities
 evidence/       run records: discovery and replay
