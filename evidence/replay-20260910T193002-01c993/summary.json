@@ -1,9 +1,0 @@
-{
-  "run_id": "replay-20260910T193002-01c993",
-  "kind": "replay",
-  "outcome": "success",
-  "duration_ms": 3931,
-  "events": 13,
-  "summary": "success: member_name=Dolores Abernathy, balance=8421.55, account_status=Open",
-  "weak_steps": []
-}

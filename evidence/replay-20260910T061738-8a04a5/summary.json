@@ -1,9 +1,0 @@
-{
-  "run_id": "replay-20260910T061738-8a04a5",
-  "kind": "replay",
-  "outcome": "recovered",
-  "duration_ms": 8304,
-  "events": 18,
-  "summary": "recovered: member_name=Dolores Abernathy, balance=8421.55, account_status=Open  (recovered from session_expired)",
-  "weak_steps": []
-}
