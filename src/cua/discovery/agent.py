@@ -48,6 +48,9 @@ class DiscoveryConfig:
     max_steps: int = 18
     name: str = ""
     description: str = ""
+    # A free tier that goes unavailable for a minute should cost a pause, not the run.
+    model_retries: int = 2
+    model_retry_pause_s: float = 30.0
 
 
 class DiscoveryAgent:
@@ -130,13 +133,7 @@ class DiscoveryAgent:
             prompt = render_observation(observation, config.goal, history,
                                         turn, config.max_steps, config.parameters)
             self._transcript.append({"turn": turn, "screen": prompt})
-            try:
-                decision = self.llm.complete_json(SYSTEM, prompt, schema)
-                self._transcript[-1]["decision"] = decision
-            except LLMError as exc:
-                self._log("model_error", str(exc), turn=turn)
-                self._save_transcript()
-                raise DiscoveryFailed(f"model failed at step {turn}: {exc}") from exc
+            decision = self._decide(prompt, schema, turn, config)
 
             action_kind = decision.get("action", "")
             reasoning = decision.get("reasoning", "").strip()
@@ -197,6 +194,31 @@ class DiscoveryAgent:
             self.recorder.attach("transcript.json", json.dumps(self._transcript, indent=2))
 
     # -------------------------------------------------------------- assembly
+    def _decide(self, prompt: str, schema: dict, turn: int,
+                config: DiscoveryConfig) -> dict:
+        """Ask the model, tolerating a provider that is briefly unavailable.
+
+        The provider already retries within one call; this is the outer loop for the
+        case where every model is refusing at once. Losing four completed turns to a
+        sixty-second outage is a waste of both the run and the surface's state, which
+        cannot be rebuilt without repeating every action.
+        """
+        last: Exception | None = None
+        for attempt in range(config.model_retries + 1):
+            try:
+                decision = self.llm.complete_json(SYSTEM, prompt, schema)
+                self._transcript[-1]["decision"] = decision
+                return decision
+            except LLMError as exc:
+                last = exc
+                self._log("model_unavailable", str(exc)[:200], turn=turn,
+                          attempt=attempt + 1)
+                if attempt < config.model_retries:
+                    time.sleep(config.model_retry_pause_s)
+        self._log("model_error", str(last), turn=turn)
+        self._save_transcript()
+        raise DiscoveryFailed(f"model failed at step {turn}: {last}") from last
+
     def _build_step(self, decision: dict, observation: Observation, index: int,
                     config: DiscoveryConfig) -> Step | None:
         """Turn one decision into a recorded step, or None if it cannot be used."""

@@ -310,3 +310,26 @@ def test_a_grid_cell_read_gets_a_row_scope_without_the_model_supplying_one(
     assert read.action.locator.scope is not None, "the read needs a row anchor"
     # And the anchor is parameterised, so one recording serves every account type.
     assert read.action.locator.scope.contains_text == "{account_type}"
+
+
+def test_a_transient_model_outage_does_not_discard_the_run(agent_for, base_url, srv):
+    """Losing completed turns to a brief outage wastes surface state that cannot be
+    rebuilt without repeating every action."""
+    class FlakyProvider(ScriptedProvider):
+        def __init__(self, script):
+            super().__init__(script)
+            self.failures = 0
+
+        def complete_json(self, system, user, schema):
+            if self.failures < 1:
+                self.failures += 1
+                raise LLMError("503 everything is busy")
+            return super().complete_json(system, user, schema)
+
+    agent, _ = agent_for(HAPPY)
+    agent.llm = FlakyProvider(HAPPY)
+    cfg = config(base_url)
+    cfg.model_retry_pause_s = 0.01          # no need to actually wait in a test
+    capability = agent.run(cfg)
+    assert agent.llm.failures == 1
+    assert capability.validate_contract() == []

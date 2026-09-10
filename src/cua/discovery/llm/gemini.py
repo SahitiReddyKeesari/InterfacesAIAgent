@@ -26,7 +26,7 @@ ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:gene
 
 # Tried in order. The first that answers is remembered for the rest of the run.
 DEFAULT_MODELS = ("gemini-flash-latest", "gemini-2.5-flash-lite",
-                  "gemini-flash-lite-latest", "gemini-2.5-flash")
+                  "gemini-flash-lite-latest")
 
 _RETRYABLE = {408, 409, 429, 500, 502, 503, 504}
 
@@ -51,7 +51,7 @@ class GeminiProvider:
 
     def __init__(self, api_key: str | None = None, model: str | None = None,
                  models: tuple[str, ...] = DEFAULT_MODELS,
-                 max_attempts: int = 4, timeout: float = 120.0):
+                 max_attempts: int = 6, timeout: float = 120.0):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         if not self.api_key:
             raise LLMError("GEMINI_API_KEY is not set")
@@ -103,7 +103,7 @@ class GeminiProvider:
                         unavailable.append(model)
                         break
                 # Exponential backoff with jitter, so parallel runs do not resonate.
-                time.sleep(min(2 ** attempt + random.random(), 20))
+                time.sleep(min(2 ** attempt + random.random(), 45))
         for model in unavailable:
             if len(self._candidates) > 1:
                 self._candidates.remove(model)
