@@ -184,6 +184,57 @@ def operator_release(request_id: str, notes: str = typer.Option("", "--notes"),
 
 
 @app.command()
+def probe(
+    capability_id: str = typer.Argument(..., help="Capability to probe."),
+    good: list[str] = typer.Option(..., "--good", help="name=value that succeeds."),
+    bad: list[str] = typer.Option(..., "--bad",
+                                  help="name=value that provokes the outcome."),
+    name: str = typer.Option(..., "--name", help="snake_case name for the outcome."),
+    description: str = typer.Option(..., "--describe"),
+    artifacts: Optional[Path] = typer.Option(None),
+    evidence: Optional[Path] = typer.Option(None),
+) -> None:
+    """Derive a known business outcome by comparing a good run against a bad one.
+
+    Runs the recorded plan twice and records whatever the application said the second
+    time and not the first. No model is involved: a signature invented by an LLM is the
+    hallucinated-checkpoint problem in a new costume.
+    """
+    from .replay.engine import ReplayEngine
+    from .replay.probe import add_outcome, propose_outcome
+
+    load_dotenv()
+    store = _store(artifacts)
+    capability = store.load(capability_id)
+    policy = for_host(capability.surface.entry_url)
+
+    def observe_after(args: dict[str, str]):
+        """Run the plan and return what the screen looked like when it stopped."""
+        surface = PlaywrightSurface()
+        try:
+            engine = ReplayEngine(surface, policy, evidence_root=evidence or EVIDENCE)
+            result = engine.run(capability, args)
+            return engine.surface.observe(), result
+        finally:
+            surface.close()
+
+    baseline, good_result = observe_after(_parse_args(good))
+    typer.echo(f"baseline run: {good_result.outcome.value}")
+    probe_observation, bad_result = observe_after(_parse_args(bad))
+    typer.echo(f"probe run   : {bad_result.outcome.value}")
+
+    outcome = propose_outcome(baseline, probe_observation, name, description)
+    if outcome is None:
+        typer.echo("nothing distinguished the two runs; no signature can be derived",
+                   err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"signature   : {outcome.signature.text_present}")
+    path = store.save(add_outcome(capability, outcome))
+    typer.echo(f"saved {path}")
+
+
+@app.command()
 def catalog(artifacts: Optional[Path] = typer.Option(None)) -> None:
     """List saved capabilities as a calling agent would see them."""
     typer.echo(json.dumps(_store(artifacts).catalog(), indent=2))
