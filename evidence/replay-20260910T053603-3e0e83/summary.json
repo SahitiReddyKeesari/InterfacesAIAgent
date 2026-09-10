@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260910T053603-3e0e83",
+  "kind": "replay",
+  "outcome": "hard_failure",
+  "duration_ms": 1796,
+  "events": 7,
+  "summary": "hard_failure at step 1: step 1 (I need to enter the member ID into the search box to look up the member.) did not complete\n  expected: After: I need to enter the member ID into the search box to look up the member.\n  observed: expected text absent: ['Member Summary']",
+  "weak_steps": []
+}

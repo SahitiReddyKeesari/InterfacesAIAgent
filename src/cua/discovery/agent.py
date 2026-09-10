@@ -133,11 +133,29 @@ class DiscoveryAgent:
         except ValueError:
             return RiskClass.SAFE
 
-    @staticmethod
-    def _checkpoint(text: str | None, intent: str) -> Checkpoint | None:
+    def _checkpoint(self, text: str | None, intent: str,
+                    parameters: dict[str, str]) -> Checkpoint | None:
+        """A checkpoint phrase can name a value too ("Member Detail - 12345"), so it is
+        parameterised like any other recorded text."""
         if not text or not text.strip():
             return None
-        return Checkpoint(description=f"After: {intent}", text_present=[text.strip()])
+        return Checkpoint(description=f"After: {intent}",
+                          text_present=[self._placeholder(text.strip(), parameters)])
+
+    @staticmethod
+    def _concrete_text(text: str, parameters: dict[str, str]) -> str:
+        for name, example in parameters.items():
+            text = text.replace("{" + name + "}", str(example))
+        return text
+
+    def _concrete_checkpoint(self, checkpoint: Checkpoint,
+                             parameters: dict[str, str]) -> Checkpoint:
+        """The recorded form holds placeholders; verifying needs the real values."""
+        return checkpoint.model_copy(update={
+            "text_present": [self._concrete_text(t, parameters)
+                             for t in checkpoint.text_present],
+            "text_absent": [self._concrete_text(t, parameters)
+                            for t in checkpoint.text_absent]})
 
     # ------------------------------------------------------------------- run
     def run(self, config: DiscoveryConfig) -> Capability:
@@ -195,6 +213,7 @@ class DiscoveryAgent:
                 history.append(f"step {turn} failed: {outcome.detail}")
                 continue
 
+            self._verify_checkpoint(step, config.parameters)
             steps.append(step)
             history.append(f"{step.action.kind}: {step.intent}")
             if isinstance(step.action, Read):
@@ -223,6 +242,26 @@ class DiscoveryAgent:
             self.recorder.attach("transcript.json", json.dumps(self._transcript, indent=2))
 
     # -------------------------------------------------------------- assembly
+    def _verify_checkpoint(self, step: Step, parameters: dict[str, str]) -> None:
+        """Drop a checkpoint that did not actually hold when it was recorded.
+
+        A model asked what proves a step worked will sometimes name a plausible heading
+        the application does not use. Recorded unverified, that phrase fails on every
+        future replay - the capability is broken before it is ever called, and the
+        failure looks like drift rather than like a bad recording. Checking costs one
+        observation and is the difference between a checkpoint and a guess.
+        """
+        if step.checkpoint is None:
+            return
+        result = self.surface.check(
+            self._concrete_checkpoint(step.checkpoint, parameters))
+        if result.passed:
+            return
+        self._log("checkpoint_discarded", step.checkpoint.description,
+                  step=step.index, reason=result.reason(),
+                  note="the phrase the model expected was not on the screen")
+        step.checkpoint = None
+
     def _decide(self, prompt: str, schema: dict, turn: int,
                 config: DiscoveryConfig) -> dict:
         """Ask the model, tolerating a provider that is briefly unavailable.
@@ -283,7 +322,8 @@ class DiscoveryAgent:
             text = self._placeholder(decision.get("text"), config.parameters)
         intent = decision.get("reasoning", "").strip() or f"{kind} {locator.description}"
         risk = self._risk(decision.get("risk"))
-        checkpoint = self._checkpoint(decision.get("checkpoint_text"), intent)
+        checkpoint = self._checkpoint(decision.get("checkpoint_text"), intent,
+                                      config.parameters)
 
         if kind == "fill":
             literal = text or ""
@@ -342,6 +382,17 @@ class DiscoveryAgent:
         success = Checkpoint(
             description=success_text or f"The goal was reached: {config.goal}",
             text_present=[success_text] if success_text else [])
+        if success_text and not self.surface.check(
+                self._concrete_checkpoint(success, config.parameters)).passed:
+            # Same problem, and worse here: an unverifiable success condition means the
+            # capability can never report success. Fall back to the last checkpoint that
+            # was observed to hold.
+            verified = next((s.checkpoint for s in reversed(steps) if s.checkpoint), None)
+            self._log("success_unverified", success_text,
+                      note="not on the screen at the end of the run",
+                      replaced_with=verified.description if verified else None)
+            success = verified or Checkpoint(
+                description=f"The goal was reached: {config.goal}")
 
         inputs = []
         for name, example in config.parameters.items():

@@ -1,0 +1,7 @@
+{"seq": 1, "at": "2026-09-10T05:36:03.032+00:00", "elapsed_ms": 0, "kind": "run_started", "message": "replay run replay-20260910T053603-3e0e83"}
+{"seq": 2, "at": "2026-09-10T05:36:03.033+00:00", "elapsed_ms": 0, "kind": "bound", "message": "meridian.read_savings_balance v1", "fingerprint": "f1ebe637a1937382", "arguments": ["account_type", "member_id"], "inputs_redacted": 0}
+{"seq": 3, "at": "2026-09-10T05:36:03.408+00:00", "elapsed_ms": 375, "kind": "step", "message": "Open the application.", "step": 0, "action": "navigate", "ok": true, "strategy": null, "confidence": 0.0}
+{"seq": 4, "at": "2026-09-10T05:36:04.121+00:00", "elapsed_ms": 1089, "kind": "step", "message": "I need to enter the member ID into the search box to look up the member.", "step": 1, "action": "fill", "ok": true, "strategy": "label_text", "confidence": 0.85}
+{"seq": 5, "at": "2026-09-10T05:36:04.785+00:00", "elapsed_ms": 1752, "kind": "checkpoint", "message": "After: I need to enter the member ID into the search box to look up the member.", "step": 1, "passed": false, "reason": "expected text absent: ['Member Summary']"}
+{"seq": 6, "at": "2026-09-10T05:36:04.827+00:00", "elapsed_ms": 1795, "kind": "failure", "message": "step 1 (I need to enter the member ID into the search box to look up the member.) did not complete", "screenshot": "01-step-1-failed.png", "step": 1, "reason": "expected text absent: ['Member Summary']"}
+{"seq": 7, "at": "2026-09-10T05:36:04.828+00:00", "elapsed_ms": 1796, "kind": "run_finished", "message": "hard_failure", "outcome": "hard_failure"}

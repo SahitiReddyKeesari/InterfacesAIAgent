@@ -393,3 +393,33 @@ def test_the_recorded_surface_kind_is_not_a_wrapper_name(agent_for, base_url, sr
     agent, _ = agent_for(HAPPY)
     capability = agent.run(config(base_url))
     assert capability.surface.kind == "web"
+
+
+def test_a_checkpoint_the_model_invented_is_not_recorded(agent_for, base_url, srv):
+    """A real run recorded 'Member Summary' - a heading this application does not have.
+    Unverified, it fails on every future replay, and the failure looks like drift
+    rather than like a bad recording."""
+    script = list(HAPPY)
+    script[1] = {**script[1], "checkpoint_text": "Member Summary"}   # not on the page
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    for step in capability.steps:
+        if step.checkpoint:
+            assert "Member Summary" not in step.checkpoint.text_present
+
+
+def test_a_checkpoint_that_does_hold_is_kept(agent_for, base_url, srv):
+    agent, _ = agent_for(HAPPY)
+    capability = agent.run(config(base_url))
+    kept = [s.checkpoint for s in capability.steps if s.checkpoint]
+    assert any("Search Results" in c.text_present for c in kept)
+
+
+def test_an_unverifiable_success_condition_is_replaced(agent_for, base_url, srv):
+    """A success condition that is never true means the capability can never succeed."""
+    script = list(HAPPY)
+    script[-1] = {"reasoning": "Done.", "action": "done", "parameter": "none",
+                  "success_text": "Congratulations You Did It"}
+    agent, _ = agent_for(script)
+    capability = agent.run(config(base_url))
+    assert "Congratulations You Did It" not in capability.success.text_present

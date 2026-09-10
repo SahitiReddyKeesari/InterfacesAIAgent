@@ -1,0 +1,41 @@
+{
+  "outcome": "hard_failure",
+  "capability_id": "meridian.read_savings_balance",
+  "version": 1,
+  "fingerprint": "f1ebe637a1937382",
+  "outputs": {},
+  "business_outcome": null,
+  "business_detail": "",
+  "recoveries": [],
+  "escalations": [],
+  "human_changes": [],
+  "failed_step": 1,
+  "expected": "After: I need to enter the member ID into the search box to look up the member.",
+  "observed": "expected text absent: ['Member Summary']",
+  "error": "step 1 (I need to enter the member ID into the search box to look up the member.) did not complete",
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the application.",
+      "action": "navigate",
+      "ok": true,
+      "strategy": null,
+      "confidence": 0.0,
+      "checkpoint_passed": null,
+      "detail": "navigated to http://127.0.0.1:8080/meridian/"
+    },
+    {
+      "index": 1,
+      "intent": "I need to enter the member ID into the search box to look up the member.",
+      "action": "fill",
+      "ok": true,
+      "strategy": "label_text",
+      "confidence": 0.85,
+      "checkpoint_passed": false,
+      "detail": "fill via label_text"
+    }
+  ],
+  "run_id": "replay-20260910T053603-3e0e83",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260910T053603-3e0e83",
+  "duration_ms": 1795
+}
