@@ -235,6 +235,31 @@ def probe(
 
 
 @app.command()
+def console(
+    host: str = typer.Option("127.0.0.1"),
+    port: int = typer.Option(8765),
+    artifacts: Optional[Path] = typer.Option(None),
+    evidence: Optional[Path] = typer.Option(None),
+) -> None:
+    """Serve the operator console - a browser view of the same operations as the CLI.
+
+    Optional. The CLI is the documented path; this exists because browsing capabilities
+    and taking control of a paused session are awkward from a terminal. Needs no Node
+    and no build step: React is vendored and the server is the standard library.
+    """
+    from .console.server import serve
+
+    load_dotenv()
+    server = serve(host, port, artifacts or ARTIFACTS, evidence or EVIDENCE,
+                   INTERVENTIONS)
+    typer.echo(f"console on http://{host}:{port}   (ctrl-c to stop)")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        typer.echo("stopped")
+
+
+@app.command()
 def catalog(artifacts: Optional[Path] = typer.Option(None)) -> None:
     """List saved capabilities as a calling agent would see them."""
     typer.echo(json.dumps(_store(artifacts).catalog(), indent=2))
