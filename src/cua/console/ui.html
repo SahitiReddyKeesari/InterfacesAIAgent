@@ -328,9 +328,185 @@ function Interventions({items, reload}) {
     </div>`;
 }
 
+// ------------------------------------------------------------------------ demo
+// What a customer-facing assistant can ask this system for. Fixed options on
+// purpose: routing free text to a capability would need a model, which is exactly
+// what this system exists to keep off the production path.
+const INTENTS = [
+  {
+    key: 'balance',
+    label: "Check a member's account balance",
+    capability: 'meridian.read_savings_balance',
+    entry: 'http://127.0.0.1:8080/meridian/',
+    goal: 'Look up member 12345 and report the balance and status of their Savings account',
+    record: {member_id: '12345', account_type: 'Savings'},
+    describe: {member_id: 'The member number to look up.',
+               account_type: "Which of the member's accounts to report on."},
+    answer: (o) => `That account holds ${o.current_balance ?? o.balance} and its status is ${o.account_status ?? o.status}.`,
+  },
+  {
+    key: 'profile',
+    label: "Look up a member's name and account",
+    capability: 'meridian.read_account_balance',
+    entry: 'http://127.0.0.1:8080/meridian/',
+    goal: 'Look up member 12345 and report their name and the balance of their Savings account',
+    record: {member_id: '12345', account_type: 'Savings'},
+    describe: {member_id: 'The member number to look up.',
+               account_type: "Which of the member's accounts to report on."},
+    answer: (o) => `${o.member_name} — ${o.account_status ?? o.status} account holding ${o.balance ?? o.current_balance}.`,
+  },
+];
+
+const MEMBERS = ['12345', '12346', '12347', '12348', '99999'];
+const ACCOUNTS = ['Savings', 'Checking', 'Certificate'];
+
+function Bubble({who, children, meta}) {
+  const mine = who === 'you';
+  return html`
+    <div style=${{display:'flex', justifyContent: mine ? 'flex-end':'flex-start',
+                  margin:'8px 0'}}>
+      <div style=${{maxWidth:'78%', padding:'9px 13px', borderRadius:'13px',
+                    background: mine ? 'var(--accent)' : 'var(--bg)',
+                    color: mine ? '#fff' : 'var(--ink)',
+                    border: mine ? 'none' : '1px solid var(--line)'}}>
+        <div>${children}</div>
+        ${meta ? html`<div style=${{marginTop:'6px', fontSize:'11px', opacity:.75}}>${meta}</div>` : null}
+      </div>
+    </div>`;
+}
+
+function Demo({caps, reload}) {
+  const [intent, setIntent] = useState(INTENTS[0].key);
+  const [member, setMember] = useState('12345');
+  const [account, setAccount] = useState('Savings');
+  const [log, setLog] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [learning, setLearning] = useState(null);
+
+  const chosen = INTENTS.find(i => i.key === intent);
+  const known = caps.find(c => c.id === chosen.capability);
+  const say = (entry) => setLog(l => [...l, entry]);
+
+  // Poll a discovery run and narrate it, then replay once it lands.
+  useEffect(() => {
+    if (!learning) return;
+    const timer = setInterval(async () => {
+      const s = await api.get(`/api/discover/${learning.run_id}`);
+      const turns = (s.events||[]).filter(e => e.kind === 'acted').length;
+      setLearning(l => l && ({...l, turns, events: s.events || []}));
+      if (s.done) {
+        clearInterval(timer);
+        setLearning(null);
+        reload();
+        if (s.ok) {
+          say({who:'bot', text:`Learned it. That took ${turns} steps on screen — I only ever have to do that once.`});
+          runReplay(true);
+        } else {
+          say({who:'bot', text:`I could not work that out on my own: ${s.error}`});
+          setBusy(false);
+        }
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [learning && learning.run_id]);
+
+  const runReplay = async (afterLearning) => {
+    const started = performance.now();
+    const r = await api.post('/api/replay', {
+      capability_id: chosen.capability,
+      args: {member_id: member, account_type: account},
+    });
+    const secs = ((performance.now() - started)/1000).toFixed(1);
+    setBusy(false);
+    reload();
+
+    if (r.error && !r.outcome) return say({who:'bot', text:r.error});
+    if (r.outcome === 'business_outcome')
+      return say({who:'bot', text:`No member matches ${member}. That is an answer, not a fault — the capability reports it by name as “${r.business_outcome}”.`,
+                  meta:`${secs}s · no model consulted`});
+    if (r.outcome === 'success' || r.outcome === 'recovered') {
+      const bits = [`${secs}s`, 'no model consulted', `${r.capability_id} v${r.version}`];
+      if ((r.recoveries||[]).length) bits.push(`recovered from ${r.recoveries.join(', ')}`);
+      if ((r.weak_steps||[]).length) bits.push(`weak steps ${r.weak_steps.join(', ')}`);
+      return say({who:'bot', text: chosen.answer(r.outputs || {}), meta: bits.join(' · ')});
+    }
+    return say({who:'bot',
+                text:`I could not complete that: ${r.error || r.outcome}.`,
+                meta:`${secs}s · evidence saved`});
+  };
+
+  const ask = async () => {
+    setBusy(true);
+    say({who:'you', text:`${chosen.label} — member ${member}, ${account}`});
+    if (known) {
+      say({who:'bot', text:'I know how to do that already. One moment.'});
+      return runReplay(false);
+    }
+    say({who:'bot', text:'I have never done that here before. Let me work it out by using the application, and I will remember it.'});
+    const started = await api.post('/api/discover', {
+      capability_id: chosen.capability, url: chosen.entry, goal: chosen.goal,
+      params: chosen.record, describe: chosen.describe, max_steps: 10,
+    });
+    if (started.error) { say({who:'bot', text:started.error}); setBusy(false); return; }
+    setLearning({run_id: started.run_id, turns: 0, events: []});
+  };
+
+  return html`
+    <${React.Fragment}>
+      <div class="card">
+        <h2>Ask</h2>
+        <div class="body">
+          <label>Request</label>
+          <select value=${intent} onChange=${e => setIntent(e.target.value)}>
+            ${INTENTS.map(i => html`<option key=${i.key} value=${i.key}>${i.label}</option>`)}
+          </select>
+          <div style=${{height:'10px'}}></div>
+          <label>Member</label>
+          <select value=${member} onChange=${e => setMember(e.target.value)}>
+            ${MEMBERS.map(m => html`<option key=${m} value=${m}>${m}${m==='99999'?' (no such member)':''}</option>`)}
+          </select>
+          <div style=${{height:'10px'}}></div>
+          <label>Account</label>
+          <select value=${account} onChange=${e => setAccount(e.target.value)}>
+            ${ACCOUNTS.map(a => html`<option key=${a} value=${a}>${a}</option>`)}
+          </select>
+          <div style=${{height:'14px'}}></div>
+          <button class="go" disabled=${busy} onClick=${ask}>
+            ${busy ? html`<span class="spin"></span>` : null}${busy ? 'Working…' : 'Ask'}
+          </button>
+          <div class="note" style=${{marginTop:'12px'}}>
+            ${known
+              ? html`A capability is recorded for this — it replays with no model.`
+              : html`Nothing recorded for this yet. The first ask drives the application
+                     with a model and can take many minutes; every ask after that replays.`}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Assistant</h2>
+        <div class="body">
+          ${log.length ? null : html`<div class="note">
+            Pick a request and ask. The first time, the system has to learn the flow by
+            using the application. After that the same request is a replay — same steps,
+            no model, seconds instead of minutes.</div>`}
+          ${log.map((m,i) => html`<${Bubble} key=${i} who=${m.who} meta=${m.meta}>${m.text}<//>`)}
+          ${learning ? html`
+            <div class="out" style=${{marginTop:'10px'}}>
+              <div><span class="spin"></span>Working it out on screen — ${learning.turns} steps so far</div>
+              <div class="note" style=${{marginTop:'8px'}}>
+                ${(learning.events||[]).slice(-4).map((e,i) => html`
+                  <div key=${i}>${e.kind} · ${(e.message||'').slice(0,72)}</div>`)}
+              </div>
+            </div>` : null}
+        </div>
+      </div>
+    <//>`;
+}
+
 // ------------------------------------------------------------------------- app
 function App() {
-  const [tab, setTab] = useState('capabilities');
+  const [tab, setTab] = useState('demo');
   const [caps, setCaps] = useState([]);
   const [runs, setRuns] = useState([]);
   const [ivs, setIvs] = useState([]);
@@ -343,7 +519,8 @@ function App() {
   useEffect(() => { reload(); const t = setInterval(reload, 4000); return () => clearInterval(t); },
             [reload]);
 
-  const tabs = [['capabilities','Capabilities'],['runs',`Runs (${runs.length})`],
+  const tabs = [['demo','Assistant'],['capabilities','Capabilities'],
+                ['runs',`Runs (${runs.length})`],
                 ['interventions',`Interventions (${ivs.filter(i=>i.state==='open').length})`]];
   return html`
     <${React.Fragment}>
@@ -354,6 +531,7 @@ function App() {
           <button key=${k} data-on=${tab===k} onClick=${() => setTab(k)}>${l}</button>`)}</nav>
       </header>
       <main class=${tab === 'interventions' ? 'single' : ''}>
+        ${tab === 'demo' ? html`<${Demo} caps=${caps} reload=${reload} />` : null}
         ${tab === 'capabilities' ? html`<${Capabilities} caps=${caps} reload=${reload} />` : null}
         ${tab === 'runs' ? html`<${Runs} runs=${runs} />` : null}
         ${tab === 'interventions' ? html`<${Interventions} items=${ivs} reload=${reload} />` : null}

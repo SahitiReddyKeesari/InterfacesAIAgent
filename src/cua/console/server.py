@@ -36,10 +36,13 @@ class ConsoleState:
         self.evidence = Path(evidence)
         self.broker = InterventionBroker(interventions)
         self.lock = threading.Lock()
-        # One replay at a time. They drive a real browser against a real application;
-        # letting a click in the UI start a second concurrent run against the same
-        # target would produce results neither run could explain.
+        # One run at a time, of either kind. They drive a real browser against a real
+        # application; letting a click in the UI start a second concurrent run against
+        # the same target would produce results neither run could explain.
         self.busy = False
+        # Discovery takes minutes and the caller polls, so its outcome outlives the
+        # request that started it.
+        self.discoveries: dict[str, dict[str, Any]] = {}
 
 
 def _capability_summary(store: Store, capability_id: str) -> dict[str, Any]:
@@ -91,6 +94,72 @@ def _run_replay(state: ConsoleState, body: dict) -> dict[str, Any]:
             state.busy = False
 
 
+def _start_discovery(state: ConsoleState, body: dict) -> dict[str, Any]:
+    """Kick off a discovery run in the background and return its id immediately.
+
+    Discovery drives an LLM through a live application and takes minutes, so the
+    request cannot wait for it. The caller polls; the run's own evidence file is the
+    progress feed, which means there is no second source of truth about what happened.
+    """
+    with state.lock:
+        if state.busy:
+            return {"error": "a run is already in progress"}
+        state.busy = True
+
+    from ..discovery.agent import DiscoveryAgent, DiscoveryConfig
+    from ..evidence.recorder import RunRecorder
+    from ..safety.redaction import Redactor
+    from ..safety.surface import PolicySurface
+
+    redactor = Redactor()
+    recorder = RunRecorder(state.evidence, "discovery", redactor=redactor)
+    record = {"run_id": recorder.run_id, "done": False, "ok": False,
+              "capability_id": body["capability_id"], "error": None}
+    state.discoveries[recorder.run_id] = record
+
+    def work():
+        from ..config import provider
+        surface = None
+        try:
+            llm = provider()
+            surface = PlaywrightSurface(headless=True)
+            guarded = PolicySurface(surface, for_host(body["url"]), redactor)
+            capability = DiscoveryAgent(guarded, llm, recorder).run(DiscoveryConfig(
+                goal=body["goal"], entry_url=body["url"],
+                capability_id=body["capability_id"],
+                parameters=body.get("params") or {},
+                parameter_docs=body.get("describe") or {},
+                max_steps=int(body.get("max_steps", 10))))
+            state.store.save(capability)
+            recorder.finish("success", capability=capability.id)
+            record["ok"] = True
+        except Exception as exc:
+            # Any failure is reported to the caller rather than raised into a thread
+            # nobody is watching - including DiscoveryFailed, which is the expected
+            # kind when a model gives up or the step budget runs out.
+            record["error"] = str(exc)
+            try:
+                recorder.failure(str(exc), surface=surface, label="discovery-failed")
+                recorder.finish("failed")
+            except Exception:
+                pass
+        finally:
+            if surface is not None:
+                surface.close()
+            record["done"] = True
+            with state.lock:
+                state.busy = False
+
+    threading.Thread(target=work, daemon=True).start()
+    return record
+
+
+def _discovery_status(state: ConsoleState, run_id: str) -> dict[str, Any]:
+    record = dict(state.discoveries.get(run_id) or {"error": "no such discovery"})
+    record["events"] = _run_detail(state, run_id).get("events", [])
+    return record
+
+
 def _runs(state: ConsoleState) -> list[dict[str, Any]]:
     out = []
     for directory in sorted(state.evidence.glob("*-*"), reverse=True):
@@ -129,6 +198,10 @@ def build_routes(state: ConsoleState) -> dict[str, Callable[[dict], Any]]:
             lambda _: state.store.catalog(),
         "POST /api/replay":
             lambda body: _run_replay(state, body),
+        "POST /api/discover":
+            lambda body: _start_discovery(state, body),
+        "GET /api/busy":
+            lambda _: {"busy": state.busy},
         "GET /api/runs":
             lambda _: _runs(state),
         "GET /api/interventions":
@@ -163,6 +236,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_evidence_file(path)
         if path.startswith("/api/runs/") and len(path.split("/")) == 4:
             return self._send_json(_run_detail(self.state, path.split("/")[3]))
+        if path.startswith("/api/discover/") and len(path.split("/")) == 4:
+            return self._send_json(_discovery_status(self.state, path.split("/")[3]))
         return self._dispatch("GET", path, {})
 
     def do_POST(self):
