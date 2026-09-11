@@ -97,6 +97,10 @@ final class Data {
         Member m2 = new Member("12346", "Bernard", "Lowe", "501-22-7744", "1969-11-02",
                                "Active", "Escalante");
         m2.accounts.add(new Account("0001234601", "Savings", 152.10, "Open"));
+        // A second account of the same product. Real members hold these - a holiday
+        // fund beside a main savings - and it is what makes "the Savings row" an
+        // ambiguous way to identify an account.
+        m2.accounts.add(new Account("0001234602", "Savings", 7310.44, "Open"));
 
         Member m3 = new Member("12347", "Maeve", "Millay", "377-45-1188", "1980-06-23",
                                "Restricted", "Sweetwater");
