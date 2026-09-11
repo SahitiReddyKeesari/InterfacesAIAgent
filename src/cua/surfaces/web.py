@@ -62,6 +62,7 @@ class PlaywrightSurface:
         # Counting the request itself is the only signal that survives all three.
         self._pending_docs = 0
         self._last_frame_miss: str | None = None
+        self._ambiguous = 0
         self._page.on("request", self._on_request)
         self._page.on("requestfinished", self._on_request_done)
         self._page.on("requestfailed", self._on_request_done)
@@ -217,17 +218,20 @@ class PlaywrightSurface:
     )
 
     def _scoped(self, frame: Frame, locator: Locator):
-        """Root to search under - the whole frame, or the one record containing the key.
+        """Root to search under - the whole frame, or the one record holding the key.
 
-        Two subtleties, both learned the hard way on this markup:
+        Three things this has to get right, each learned from a run that got it wrong:
 
-        * Layouts nest containers inside containers, so an outer element also "contains"
-          the text and would silently widen the scope back to the whole list - which
-          then falls through to a positional id and selects the wrong record. The
-          tightest match is the right one.
-        * A container that holds the text but not the control is not a scope at all
-          (a label cell matches "12347" without containing the Select link), so
-          candidates are filtered by whether they actually hold the target role.
+        * Layouts nest containers, so an outer element also "contains" the text and
+          would widen the scope back to the whole list - which then falls through to a
+          positional id and selects the wrong record. The innermost match is the one.
+        * A container holding the text but not the control is not a scope at all (a
+          label cell matches "12347" without containing the Select link), so candidates
+          are filtered by whether they actually hold the target role.
+        * More than one record matching means the key does not identify a record.
+          Picking the first would answer about whichever happened to be listed first -
+          a member with two savings accounts gets one balance and no hint the other
+          exists. That is worse than failing, so it fails.
         """
         if locator.scope is None:
             return frame.locator("body")
@@ -235,19 +239,24 @@ class PlaywrightSurface:
         wanted = _ROLE_CSS.get(locator.role) if locator.role else None
         for tier in self._SCOPE_TIERS:
             rows = frame.locator(tier).filter(has_text=locator.scope.contains_text)
-            best, best_key = None, None
+            found: list[tuple[int, Any]] = []
             for i in range(min(rows.count(), 40)):
                 row = rows.nth(i)
                 try:
                     if wanted and row.locator(wanted).count() == 0:
                         continue
-                    key = (row.locator(tier).count(), len(row.inner_text()))
+                    found.append((row.locator(tier).count(), row))
                 except Exception:
                     continue
-                if best_key is None or key < best_key:
-                    best, best_key = row, key
-            if best is not None:
-                return best
+            if not found:
+                continue
+
+            depth = min(nesting for nesting, _ in found)
+            innermost = [row for nesting, row in found if nesting == depth]
+            if len(innermost) > 1:
+                self._ambiguous = len(innermost)
+                return None
+            return innermost[0]
         return None
 
     def _try(self, root, candidate, role: Role | None = None) -> Any:
@@ -296,12 +305,11 @@ class PlaywrightSurface:
 
     def resolve(self, locator: Locator) -> Resolution:
         self._last_frame_miss = None
+        self._ambiguous = 0
         frame = self._frame_for(locator.frame_path)
         root = self._scoped(frame, locator)
         if root is None:
-            return Resolution(resolved=False, detail=(
-                f"scope row containing {locator.scope.contains_text!r} not present"
-                if locator.scope else "scope root missing"))
+            return Resolution(resolved=False, detail=self._scope_failure(locator))
 
         fell: list[Strategy] = []
         for cand in locator.candidates:
@@ -324,12 +332,25 @@ class PlaywrightSurface:
         return Resolution(resolved=False, matches=0, fell_through=fell,
                           detail="no candidate resolved to exactly one control" + miss)
 
+    def _scope_failure(self, locator: Locator) -> str:
+        """Why a scope produced nothing to search in. Ambiguity and absence are
+        different problems: one needs a more specific key, the other a correct one."""
+        if not locator.scope:
+            return "scope root missing"
+        key = locator.scope.contains_text
+        if self._ambiguous:
+            return (f"{self._ambiguous} records match {key!r}; it does not identify one "
+                    f"record, so acting on any of them would be a guess")
+        return f"no record matching {key!r} is present"
+
     def _handle(self, locator: Locator):
         """The Playwright locator for the winning candidate, or None."""
+        self._ambiguous = 0
         frame = self._frame_for(locator.frame_path)
         root = self._scoped(frame, locator)
         if root is None:
-            return None, Resolution(resolved=False, detail="scope not present")
+            return None, Resolution(resolved=False,
+                                    detail=self._scope_failure(locator))
         fell: list[Strategy] = []
         for cand in locator.candidates:
             try:
@@ -376,8 +397,12 @@ class PlaywrightSurface:
 
         handle, res = self._handle(action.locator)
         if handle is None:
+            # Keep the resolution's own diagnosis. "could not locate X" and "3 records
+            # match X, so acting on any of them would be a guess" need different fixes,
+            # and collapsing them to the first wastes the work of telling them apart.
+            why = f": {res.detail}" if res.detail else ""
             return ActionResult(ok=False, resolution=res,
-                                detail=f"could not locate {action.locator.description!r}")
+                                detail=f"could not locate {action.locator.description!r}{why}")
 
         if kind == "read":
             try:

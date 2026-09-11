@@ -213,3 +213,34 @@ def test_row_scoping_works_without_a_table(surface, tmp_path):
         assert surface.resolve(loc).resolved
         row = surface._scoped(surface._frame_for(loc.frame_path), loc)
         assert expected in row.inner_text()
+
+
+def test_a_scope_matching_several_records_refuses_rather_than_picking_one(
+        surface, base_url, srv):
+    """Member 12346 holds two savings accounts. "the Savings row" names neither of
+    them, and answering with whichever is listed first gives a caller one balance with
+    no hint the other exists - confident, and possibly wrong."""
+    open_at(surface, base_url, "/meridian/")
+    obs = surface.observe()
+    surface.act(Fill(locator=locators.build(find_input_by_caption(obs, "Member / Name")),
+                     text="12346"))
+    search = next(e for e in obs.elements if e.role is Role.LINK and e.name == "Search")
+    surface.act(Click(locator=locators.build(search)))
+    obs2 = surface.observe()
+    sel = next(e for e in obs2.elements if e.role is Role.LINK and e.name == "Select")
+    surface.act(Click(locator=locators.build(sel, scope=locators.row_scope("12346"))))
+    obs3 = surface.observe()
+
+    cell = next(e for e in obs3.elements
+                if e.role is Role.CELL and e.column_header == "Current Balance")
+    ambiguous = locators.build(cell, "balance", scope=locators.row_scope("Savings"),
+                               peers=obs3.elements)
+    result = surface.resolve(ambiguous)
+    assert not result.resolved
+    assert "2 records match" in result.detail
+    assert "guess" in result.detail
+
+    # A product this member holds exactly one of still resolves.
+    single = locators.build(cell, "balance", scope=locators.row_scope("0001234602"),
+                            peers=obs3.elements)
+    assert surface.resolve(single).resolved
