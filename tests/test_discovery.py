@@ -423,3 +423,54 @@ def test_an_unverifiable_success_condition_is_replaced(agent_for, base_url, srv)
     agent, _ = agent_for(script)
     capability = agent.run(config(base_url))
     assert "Congratulations You Did It" not in capability.success.text_present
+
+
+def test_a_refusal_stops_the_run_and_reports_what_the_application_said(
+        agent_for, base_url, srv):
+    """A real run asked to lock a restricted member's cards. The application refused
+    with SEC-0917, the refusal was on screen, and the loop kept clicking until the step
+    budget ran out - then blamed its own budget. Repeating an action that changes
+    nothing is the application saying no."""
+    script = [
+        {"reasoning": "Open card services.", "action": "click",
+         "target": "Card Services", "parameter": "none"},
+        {"reasoning": "Enter the member number.", "action": "fill",
+         "target": "Member / Name:", "parameter": "member_id", "text": ""},
+        {"reasoning": "Retrieve the cards.", "action": "click",
+         "target": "Retrieve Cards", "parameter": "none"},
+        # Lock a restricted member's card - refused, twice.
+        {"reasoning": "Lock the card.", "action": "click", "target": "Lock",
+         "parameter": "none"},
+        {"reasoning": "Try locking again.", "action": "click", "target": "Lock",
+         "parameter": "none"},
+        {"reasoning": "And again.", "action": "click", "target": "Lock",
+         "parameter": "none"},
+    ]
+    agent, _ = agent_for(script)
+    with pytest.raises(DiscoveryFailed) as caught:
+        agent.run(config(base_url, parameters={"member_id": "12347"}, max_steps=8))
+    assert "refusing" in str(caught.value)
+    assert "SEC-0917" in str(caught.value), "the reason must come from the application"
+
+
+def test_exhausting_the_budget_still_reports_the_application_message(
+        agent_for, base_url, srv):
+    script = [{"reasoning": "search again", "action": "fill",
+               "target": "Member / Name:", "parameter": "member_id", "text": ""}
+              for _ in range(6)]
+    agent, _ = agent_for(script)
+    with pytest.raises(DiscoveryFailed) as caught:
+        agent.run(config(base_url, max_steps=3))
+    assert "budget" in str(caught.value)
+
+
+def test_the_description_does_not_name_the_values_it_was_recorded_with(
+        agent_for, base_url, srv):
+    """The description is the label everywhere the capability is offered - a dropdown,
+    `cua show`, the catalog an agent reads. Naming the member it happened to be recorded
+    against makes a reusable capability read as though it only works for that member."""
+    agent, _ = agent_for(HAPPY)
+    capability = agent.run(config(
+        base_url, goal="Look up member 12345 and report their name"))
+    assert "12345" not in capability.description
+    assert "{member_id}" in capability.description

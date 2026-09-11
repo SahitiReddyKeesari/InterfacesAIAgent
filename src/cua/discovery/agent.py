@@ -164,6 +164,8 @@ class DiscoveryAgent:
                   model=getattr(self.llm, "model", "?"), budget=config.max_steps)
 
         schema = decision_schema(list(config.parameters))
+        stalled = 0
+        last_signature = ""
         steps: list[Step] = [Step(index=0, intent="Open the application.",
                                   action=Navigate(url=config.entry_url),
                                   risk=RiskClass.SAFE)]
@@ -213,6 +215,27 @@ class DiscoveryAgent:
                 history.append(f"step {turn} failed: {outcome.detail}")
                 continue
 
+            # An action that lands but changes nothing is the application refusing.
+            # Repeating it will not help, and burning the budget hides the reason -
+            # which is usually written on the screen.
+            after = self.surface.observe()
+            signature = after.text_digest
+            if signature == last_signature:
+                stalled += 1
+                message = application_message(after)
+                self._log("no_progress", message or "the screen did not change",
+                          turn=turn, consecutive=stalled)
+                # A refusal is the application *saying* something and not moving.
+                # Nothing changing with nothing said is merely a wasted turn - the
+                # step budget is the right thing to end that, not a claim that the
+                # application objected when it never spoke.
+                if stalled >= 2 and message:
+                    self._save_transcript()
+                    raise DiscoveryFailed(f"the application is refusing this: {message}")
+            else:
+                stalled = 0
+            last_signature = signature
+
             self._verify_checkpoint(step, config.parameters)
             steps.append(step)
             history.append(f"{step.action.kind}: {step.intent}")
@@ -223,8 +246,11 @@ class DiscoveryAgent:
                     source_step=step.index))
         else:
             self._save_transcript()
-            raise DiscoveryFailed(f"step budget of {config.max_steps} exhausted "
-                                  f"without reaching the goal")
+            message = application_message(self.surface.observe())
+            detail = f" The application last said: {message}" if message else ""
+            raise DiscoveryFailed(
+                f"step budget of {config.max_steps} exhausted without reaching the "
+                f"goal.{detail}")
 
         capability = self._assemble(config, steps, outputs, success_text)
         self._save_transcript()
@@ -418,10 +444,17 @@ class DiscoveryAgent:
              for step in steps if getattr(step.action, "locator", None)),
             default=None)
 
+        # The goal names the values it was recorded against ("member 12345 ... their
+        # Savings account"). Left alone, that description becomes the label everywhere
+        # the capability is offered - a dropdown entry, `cua show`, the catalog an agent
+        # reads - and reads as though the capability only works for that member. It is
+        # parameterised for the same reason the steps are.
+        description = self._placeholder(config.description or config.goal,
+                                        config.parameters)
         return Capability(
             id=config.capability_id,
             name=config.name or config.capability_id.replace(".", " ").replace("_", " "),
-            description=config.description or config.goal,
+            description=description,
             surface=SurfaceBinding(kind=_base_surface_name(self.surface),
                                    entry_url=config.entry_url),
             inputs=kept, outputs=outputs, steps=steps, success=success,
@@ -434,6 +467,25 @@ class DiscoveryAgent:
 
 # Values that change on their own - amounts, balances, dates. Never a row anchor.
 _VOLATILE = re.compile(r"[\d.,$%/\-]+")
+
+# Enterprise applications name their refusals: SEC-0917, CRD-2210, SUM-0110. When one
+# is on screen, it is the application telling you why - and far more useful in a failure
+# report than anything this loop can say about its own step counter.
+_CONDITION_CODE = re.compile(r"\b[A-Z]{2,4}-\d{3,5}\b")
+
+
+def application_message(observation: Observation) -> str:
+    """The most explanatory thing the application is currently saying, if anything."""
+    best = ""
+    for element in observation.elements:
+        text = (element.value or element.text or "").strip()
+        if not (12 <= len(text) <= 200):
+            continue
+        if _CONDITION_CODE.search(text):
+            return text                      # a coded refusal beats everything
+        if text.rstrip().endswith(".") and len(text) > len(best):
+            best = text
+    return best
 
 
 def _snake(text: str) -> str:
