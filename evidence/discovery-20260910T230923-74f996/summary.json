@@ -1,0 +1,8 @@
+{
+  "run_id": "discovery-20260910T230923-74f996",
+  "kind": "discovery",
+  "outcome": "success",
+  "duration_ms": 1570897,
+  "events": 17,
+  "capability": "meridian.read_savings_balance"
+}

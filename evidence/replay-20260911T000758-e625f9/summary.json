@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T000758-e625f9",
+  "kind": "replay",
+  "outcome": "hard_failure",
+  "duration_ms": 0,
+  "events": 2,
+  "summary": "hard_failure at step None: arguments do not satisfy the contract: account_type is required\n  expected: arguments matching the declared inputs\n  observed: account_type is required",
+  "weak_steps": []
+}
