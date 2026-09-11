@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T034208-143fdb",
+  "kind": "replay",
+  "outcome": "blocked_by_policy",
+  "duration_ms": 1032,
+  "events": 6,
+  "summary": "blocked at step 2: step 2 is irreversible (I will click the Search link to perform the member lookup with the entered member ID.) and needs explicit approval",
+  "weak_steps": []
+}

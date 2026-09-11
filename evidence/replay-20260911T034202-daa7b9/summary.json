@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T034202-daa7b9",
+  "kind": "replay",
+  "outcome": "escalated",
+  "duration_ms": 5475,
+  "events": 8,
+  "summary": "escalated at step 3: no operator took the intervention\n  expected: could not locate 'I will click the Select link for member 12345 to view their account details.': no record matching '12345' is present\n  observed: intervention abandoned",
+  "weak_steps": []
+}

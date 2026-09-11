@@ -1,0 +1,41 @@
+{
+  "outcome": "blocked_by_policy",
+  "capability_id": "meridian.read_savings_balance",
+  "version": 2,
+  "fingerprint": "49f76c38be6c08f8",
+  "outputs": {},
+  "business_outcome": null,
+  "business_detail": "",
+  "recoveries": [],
+  "escalations": [],
+  "human_changes": [],
+  "failed_step": 2,
+  "expected": "policy to permit a irreversible step",
+  "observed": "confirm",
+  "error": "step 2 is irreversible (I will click the Search link to perform the member lookup with the entered member ID.) and needs explicit approval",
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the application.",
+      "action": "navigate",
+      "ok": true,
+      "strategy": null,
+      "confidence": 0.0,
+      "checkpoint_passed": null,
+      "detail": "navigated to http://127.0.0.1:8080/meridian/"
+    },
+    {
+      "index": 1,
+      "intent": "I will enter the member ID into the Member / Name textbox to begin the lookup.",
+      "action": "fill",
+      "ok": true,
+      "strategy": "label_text",
+      "confidence": 0.85,
+      "checkpoint_passed": null,
+      "detail": "fill via label_text"
+    }
+  ],
+  "run_id": "replay-20260911T034208-143fdb",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260911T034208-143fdb",
+  "duration_ms": 1031
+}

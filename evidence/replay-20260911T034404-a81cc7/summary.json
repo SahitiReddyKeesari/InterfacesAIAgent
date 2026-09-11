@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T034404-a81cc7",
+  "kind": "replay",
+  "outcome": "hard_failure",
+  "duration_ms": 2113,
+  "events": 8,
+  "summary": "hard_failure at step 3: step 3 (I will click the Select link for member 12345 to view their account details.) did not complete\n  expected: the click to succeed\n  observed: could not locate 'I will click the Select link for member 12345 to view their account details.': no record matching '12345' is present",
+  "weak_steps": []
+}

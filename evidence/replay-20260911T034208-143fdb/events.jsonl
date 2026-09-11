@@ -1,0 +1,6 @@
+{"seq": 1, "at": "2026-09-11T03:42:08.347+00:00", "elapsed_ms": 0, "kind": "run_started", "message": "replay run replay-20260911T034208-143fdb"}
+{"seq": 2, "at": "2026-09-11T03:42:08.347+00:00", "elapsed_ms": 0, "kind": "bound", "message": "meridian.read_savings_balance v2", "fingerprint": "49f76c38be6c08f8", "arguments": ["account_type", "member_id"], "inputs_redacted": 0}
+{"seq": 3, "at": "2026-09-11T03:42:08.691+00:00", "elapsed_ms": 344, "kind": "step", "message": "Open the application.", "step": 0, "action": "navigate", "ok": true, "strategy": null, "confidence": 0.0}
+{"seq": 4, "at": "2026-09-11T03:42:09.378+00:00", "elapsed_ms": 1030, "kind": "step", "message": "I will enter the member ID into the Member / Name textbox to begin the lookup.", "step": 1, "action": "fill", "ok": true, "strategy": "label_text", "confidence": 0.85}
+{"seq": 5, "at": "2026-09-11T03:42:09.378+00:00", "elapsed_ms": 1031, "kind": "blocked", "message": "step 2 is irreversible (I will click the Search link to perform the member lookup with the entered member ID.) and needs explicit approval", "step": 2}
+{"seq": 6, "at": "2026-09-11T03:42:09.379+00:00", "elapsed_ms": 1032, "kind": "run_finished", "message": "blocked_by_policy", "outcome": "blocked_by_policy"}
