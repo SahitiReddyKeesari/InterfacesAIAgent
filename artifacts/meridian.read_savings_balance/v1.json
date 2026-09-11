@@ -3,7 +3,7 @@
   "id": "meridian.read_savings_balance",
   "version": 1,
   "name": "meridian read savings balance",
-  "description": "Look up member 12345 and report the balance and status of their Savings account",
+  "description": "Look up member {member_id} and report the balance and status of their {account_type} account",
   "surface": {
     "kind": "web",
     "entry_url": "http://127.0.0.1:8080/meridian/",
@@ -259,9 +259,9 @@
     }
   ],
   "success": {
-    "description": "Member Detail — {member_id}",
+    "description": "Member Detail \u2014 {member_id}",
     "text_present": [
-      "Member Detail — {member_id}"
+      "Member Detail \u2014 {member_id}"
     ],
     "text_absent": [],
     "locator_present": []
