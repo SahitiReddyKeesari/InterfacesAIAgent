@@ -309,7 +309,8 @@ class PlaywrightSurface:
         frame = self._frame_for(locator.frame_path)
         root = self._scoped(frame, locator)
         if root is None:
-            return Resolution(resolved=False, detail=self._scope_failure(locator))
+            return Resolution(resolved=False, ambiguous=self._ambiguous,
+                              detail=self._scope_failure(locator))
 
         fell: list[Strategy] = []
         for cand in locator.candidates:
@@ -349,7 +350,7 @@ class PlaywrightSurface:
         frame = self._frame_for(locator.frame_path)
         root = self._scoped(frame, locator)
         if root is None:
-            return None, Resolution(resolved=False,
+            return None, Resolution(resolved=False, ambiguous=self._ambiguous,
                                     detail=self._scope_failure(locator))
         fell: list[Strategy] = []
         for cand in locator.candidates:

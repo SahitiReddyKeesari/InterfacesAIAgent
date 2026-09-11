@@ -203,6 +203,21 @@ class ReplayEngine:
             return index, run.result(known.outcome, business_outcome=known.name,
                                      business_detail=known.description)
 
+        # An ambiguous request is something the caller can fix by narrowing the key,
+        # so it is an answer rather than a fault. It is recognised here rather than
+        # declared per capability because the application never reports it - the
+        # system detects it, by finding more than one record behind one key.
+        if result.resolution is not None and result.resolution.ambiguous:
+            detail = (f"{result.resolution.ambiguous} records matched the value given "
+                      f"for step {step.index}; it does not identify one record. Supply "
+                      f"a value that names a single record - an account number rather "
+                      f"than a product type.")
+            self._log(run.recorder, "ambiguous_request", detail, step=step.index,
+                      matched=result.resolution.ambiguous)
+            return index, run.result(Outcome.BUSINESS,
+                                     business_outcome="ambiguous_request",
+                                     business_detail=detail)
+
         recovered = self._try_recover(run, step, index)
         if recovered is not None:
             return recovered, None

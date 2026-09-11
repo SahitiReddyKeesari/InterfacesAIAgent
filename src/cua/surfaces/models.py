@@ -250,6 +250,10 @@ class Resolution(BaseModel):
     strategy: Strategy | None = None
     confidence: float = 0.0
     matches: int = 0
+    # How many records the scope matched when it matched more than one. A caller can
+    # act on this - supply a narrower key - which is what makes it an answer rather
+    # than a fault.
+    ambiguous: int = 0
     fell_through: list[Strategy] = Field(default_factory=list)
     detail: str = ""
 
