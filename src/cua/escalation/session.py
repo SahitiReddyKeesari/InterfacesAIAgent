@@ -23,6 +23,7 @@ from pathlib import Path
 from ..surfaces.base import Surface
 from ..surfaces.models import (Action, ActionResult, CheckResult, Checkpoint, Locator,
                                Observation, Resolution)
+from ..surfaces.models import Role
 from .broker import InterventionBroker
 from .protocol import Control, Handoff, InterventionRequest, RequestState
 
@@ -33,6 +34,11 @@ from .protocol import Control, Handoff, InterventionRequest, RequestState
 # behalf, or a scripted remediation for a condition a team has decided to automate.
 # It receives the live surface and the request, and returns the operator's name.
 OperatorAdapter = "Callable[[Surface, InterventionRequest], str]"
+
+
+# Only controls a person can actually change. Static text moving around is the
+# application responding, not the operator acting.
+_EDITABLE = {Role.TEXTBOX, Role.COMBOBOX, Role.CHECKBOX, Role.RADIO}
 
 
 def diff_observations(before: Observation, after: Observation) -> list[str]:
@@ -47,25 +53,35 @@ def diff_observations(before: Observation, after: Observation) -> list[str]:
         changes.append(f"navigated from {before.url} to {after.url}")
 
     def keyed(observation: Observation) -> dict[str, str]:
+        """Values a person would recognise, keyed by what they are called on screen.
+
+        Only controls with a human-meaningful name: a caption, an accessible name or a
+        column heading. A generated id or an element reference identifies nothing to
+        somebody reading this later, and listing every layout cell buries the one line
+        that matters.
+        """
         out: dict[str, str] = {}
         for element in observation.elements:
-            key = (element.label_text or element.name or element.column_header
-                   or element.control_id or element.ref)
-            if key and element.value is not None:
-                out[f"{element.role.value}:{key}"] = element.value
+            if element.role not in _EDITABLE:
+                continue
+            name = (element.label_text or element.name or element.column_header or "")
+            name = name.strip().rstrip(":")
+            if not name or element.value is None:
+                continue
+            out[name] = element.value
         return out
 
     old, new = keyed(before), keyed(after)
-    for key, value in new.items():
-        if key not in old:
+    for name, value in new.items():
+        was = old.get(name)
+        if was is None or was == value:
             continue
-        if old[key] != value:
-            changes.append(f"changed {key} from {old[key]!r} to {value!r}")
-    for key in new.keys() - old.keys():
-        if new[key]:
-            changes.append(f"set {key} to {new[key]!r}")
+        changes.append(f"changed {name} from {was!r} to {value!r}")
+    for name in sorted(new.keys() - old.keys()):
+        if new[name]:
+            changes.append(f"entered {new[name]!r} in {name}")
     if not changes and before.text_digest != after.text_digest:
-        changes.append("the screen changed, but no field value differed")
+        changes.append("the screen moved on, but no field value was edited")
     return changes
 
 
