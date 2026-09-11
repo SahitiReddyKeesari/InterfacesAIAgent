@@ -221,3 +221,98 @@ def test_a_second_run_is_refused_while_one_is_in_flight(console):
     state = ConsoleState(Path("artifacts"), Path("evidence"), Path("evidence/interventions"))
     state.busy = True
     assert "already in progress" in _start_discovery(state, {"capability_id": "x"})["error"]
+
+
+# ------------------------------------------------------------------- the router
+def route_with(monkeypatch, reply):
+    """Stub the router's model with a fixed reply."""
+    class Stub:
+        name = model = "stub"
+
+        def complete_json(self, system, user, schema):
+            Stub.last_prompt = user
+            return reply
+
+    monkeypatch.setattr("cua.config.provider", lambda name=None: Stub())
+    return Stub
+
+
+def test_a_confident_match_is_answerable(console, monkeypatch):
+    route_with(monkeypatch, {
+        "match": "meridian.read_account_balance", "confidence": "high",
+        "arguments": '{"member_id": "12347", "account_type": "Certificate"}',
+        "reasoning": "asks for a balance"})
+    _, r = post(console, "/api/ask", {"question": "balance of 12347's certificate?"})
+    assert r["can_answer"] is True
+    assert r["arguments"] == {"member_id": "12347", "account_type": "Certificate"}
+
+
+def test_low_confidence_is_never_answered(console, monkeypatch):
+    """A router that always returns its best guess answers questions nobody asked."""
+    route_with(monkeypatch, {
+        "match": "meridian.read_account_balance", "confidence": "low",
+        "reasoning": "this might be about cards instead"})
+    _, r = post(console, "/api/ask", {"question": "is their card ok?"})
+    assert r["can_answer"] is False
+    assert r["confidence"] == "low"
+
+
+def test_a_missing_argument_is_reported_not_invented(console, monkeypatch):
+    """An invented member number is a lookup of somebody else's account."""
+    route_with(monkeypatch, {
+        "match": "meridian.read_account_balance", "confidence": "high",
+        "arguments": "{}", "missing": "member_id",
+        "reasoning": "no member number given"})
+    _, r = post(console, "/api/ask", {"question": "what is the balance?"})
+    assert r["can_answer"] is False
+    assert r["missing"] == ["member_id"]
+
+
+def test_a_capability_the_model_invented_is_not_matched(console, monkeypatch):
+    route_with(monkeypatch, {"match": "meridian.does_not_exist", "confidence": "high",
+                             "reasoning": "confidently wrong"})
+    _, r = post(console, "/api/ask", {"question": "do the thing"})
+    assert r["capability_id"] is None
+    assert r["can_answer"] is False
+
+
+def test_an_unmatched_question_yields_a_goal_and_an_id_to_learn_it_under(
+        console, monkeypatch):
+    route_with(monkeypatch, {
+        "match": "none", "confidence": "high",
+        "goal": "Look up a member and report the status of their debit card",
+        "reasoning": "no capability covers cards"})
+    _, r = post(console, "/api/ask", {"question": "is member 12345's card locked?"})
+    assert r["capability_id"] is None
+    assert r["goal"].startswith("Look up a member")
+    assert r["suggested_id"].startswith("meridian.")
+
+
+def test_the_router_is_shown_the_capabilities_it_may_choose_from(console, monkeypatch):
+    stub = route_with(monkeypatch, {"match": "none", "confidence": "low",
+                                    "reasoning": "x"})
+    post(console, "/api/ask", {"question": "anything"})
+    assert "meridian.read_account_balance" in stub.last_prompt
+
+
+def test_an_empty_question_is_rejected(console):
+    _, r = post(console, "/api/ask", {"question": "   "})
+    assert "error" in r
+
+
+def test_an_incomplete_call_executes_nothing(console, srv):
+    """Defence in depth behind the form.
+
+    The UI refuses to substitute a recorded example for a value the operator did not
+    supply - running against the record a capability was *recorded from* rather than the
+    one being asked about produces an answer that reads perfectly plausibly and concerns
+    somebody else's account. The server must refuse the same call, and must refuse it
+    before touching the application.
+    """
+    _, result = post(console, "/api/replay", {
+        "capability_id": "meridian.read_account_balance",
+        "args": {"member_id": "12345"}})          # account_type omitted
+    assert result["outcome"] == "hard_failure"
+    assert "contract" in result["error"]
+    assert result["steps"] == [], "no step may run on an incomplete call"
+    assert result["outputs"] == {}

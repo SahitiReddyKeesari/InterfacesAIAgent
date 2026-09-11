@@ -8,6 +8,7 @@ the system it is supposed to be observing.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +27,10 @@ HERE = Path(__file__).parent
 STATIC = {"/": HERE / "ui.html", "/ui.html": HERE / "ui.html"}
 MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript",
         ".css": "text/css", ".png": "image/png", ".json": "application/json"}
+
+_STOPWORDS = {"the", "a", "an", "of", "for", "and", "to", "in", "on", "is", "are",
+              "what", "whats", "show", "me", "please", "their", "this", "that", "look",
+              "up", "find", "get", "tell", "report"}
 
 
 class ConsoleState:
@@ -92,6 +97,44 @@ def _run_replay(state: ConsoleState, body: dict) -> dict[str, Any]:
     finally:
         with state.lock:
             state.busy = False
+
+
+def _suggested_id(goal: str, taken: set[str]) -> str:
+    """A stable, readable id for a capability the system is about to learn."""
+    words = [w for w in re.split(r"[^a-z0-9]+", goal.lower()) if w
+             and w not in _STOPWORDS][:4]
+    base = "meridian." + ("_".join(words) or "capability")
+    candidate, n = base, 2
+    while candidate in taken:
+        candidate, n = f"{base}_{n}", n + 1
+    return candidate
+
+
+def _ask(state: ConsoleState, body: dict) -> dict[str, Any]:
+    """Route a free-text question to a capability, or report that none fits.
+
+    The model runs here, in the assistant, deciding *what* to do. Whatever it decides,
+    carrying it out is still a deterministic replay.
+    """
+    from ..config import provider
+    from ..discovery.router import route
+
+    question = (body.get("question") or "").strip()
+    if not question:
+        return {"error": "ask something"}
+
+    catalog = state.store.catalog()
+    try:
+        decision = route(provider(), question, catalog)
+    except Exception as exc:
+        return {"error": f"the assistant could not reach a model: {exc}"}
+
+    payload = decision.to_dict()
+    payload["question"] = question
+    if decision.capability_id is None:
+        payload["suggested_id"] = _suggested_id(
+            decision.goal or question, set(state.store.list_capabilities()))
+    return payload
 
 
 def _start_discovery(state: ConsoleState, body: dict) -> dict[str, Any]:
@@ -198,6 +241,8 @@ def build_routes(state: ConsoleState) -> dict[str, Callable[[dict], Any]]:
             lambda _: state.store.catalog(),
         "POST /api/replay":
             lambda body: _run_replay(state, body),
+        "POST /api/ask":
+            lambda body: _ask(state, body),
         "POST /api/discover":
             lambda body: _start_discovery(state, body),
         "GET /api/busy":

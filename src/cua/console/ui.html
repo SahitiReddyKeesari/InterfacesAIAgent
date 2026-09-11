@@ -94,11 +94,10 @@ function RunForm({cap, onDone}) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
-  useEffect(() => {
-    const seed = {};
-    (cap.inputs||[]).forEach(p => { seed[p.name] = p.example || ''; });
-    setArgs(seed); setResult(null);
-  }, [cap.id, cap.version]);
+  // Start empty. An example is documentation, not a default: a form arriving
+  // pre-filled with the member it was recorded against invites running it against
+  // that member by simply not noticing.
+  useEffect(() => { setArgs({}); setResult(null); }, [cap.id, cap.version]);
 
   const run = async () => {
     setBusy(true); setResult(null);
@@ -117,11 +116,14 @@ function RunForm({cap, onDone}) {
               ${p.enum_values && p.enum_values.length
                 ? html`<select value=${args[p.name]||''}
                          onChange=${e => setArgs({...args, [p.name]: e.target.value})}>
+                    <option value="">— choose —</option>
                     ${p.enum_values.map(v => html`<option key=${v} value=${v}>${v}</option>`)}
                   </select>`
                 : html`<input value=${args[p.name]||''} placeholder=${p.example||''}
                          onChange=${e => setArgs({...args, [p.name]: e.target.value})} />`}
-              <div class="note" style=${{marginTop:'4px'}}>${p.description}</div>
+              <div class="note" style=${{marginTop:'4px'}}>
+                ${p.description}${p.example ? html`<span style=${{opacity:.7}}> (recorded with ${p.example} — not a default)</span>` : null}
+              </div>
             </div>`)}
         </div>
         <div style=${{marginTop:'14px', display:'flex', gap:'10px', alignItems:'center'}}>
@@ -329,126 +331,179 @@ function Interventions({items, reload}) {
 }
 
 // ------------------------------------------------------------------------ demo
-// What a customer-facing assistant can ask this system for. Fixed options on
-// purpose: routing free text to a capability would need a model, which is exactly
-// what this system exists to keep off the production path.
-const INTENTS = [
-  {
-    key: 'balance',
-    label: "Check a member's account balance",
-    capability: 'meridian.read_savings_balance',
-    entry: 'http://127.0.0.1:8080/meridian/',
-    goal: 'Look up member 12345 and report the balance and status of their Savings account',
-    record: {member_id: '12345', account_type: 'Savings'},
-    describe: {member_id: 'The member number to look up.',
-               account_type: "Which of the member's accounts to report on."},
-    answer: (o) => `That account holds ${o.current_balance ?? o.balance} and its status is ${o.account_status ?? o.status}.`,
-  },
-  {
-    key: 'profile',
-    label: "Look up a member's name and account",
-    capability: 'meridian.read_account_balance',
-    entry: 'http://127.0.0.1:8080/meridian/',
-    goal: 'Look up member 12345 and report their name and the balance of their Savings account',
-    record: {member_id: '12345', account_type: 'Savings'},
-    describe: {member_id: 'The member number to look up.',
-               account_type: "Which of the member's accounts to report on."},
-    answer: (o) => `${o.member_name} — ${o.account_status ?? o.status} account holding ${o.balance ?? o.current_balance}.`,
-  },
-];
+// The assistant. A model runs here, deciding *what* to do - which capability answers a
+// question, and what its arguments are. Carrying it out is still a deterministic
+// replay. When nothing fits, the assistant learns the flow once and the new capability
+// joins the list below, so the same question is a replay ever after.
 
-const MEMBERS = ['12345', '12346', '12347', '12348', '99999'];
-const ACCOUNTS = ['Savings', 'Checking', 'Certificate'];
+// Deliberately no list of members or accounts here. Shipping customer identifiers in
+// a dropdown is both a data-handling problem and a fiction - a real deployment has no
+// idea who the caller will ask about. The fields below are rendered from the selected
+// capability's declared inputs, so the contract decides what is asked for and which
+// values are constrained.
 
-function Bubble({who, children, meta}) {
+function Bubble({who, children, meta, tone}) {
   const mine = who === 'you';
+  const border = tone === 'unsure' ? 'var(--warn)'
+               : tone === 'answer' ? 'var(--ok)' : 'var(--line)';
   return html`
     <div style=${{display:'flex', justifyContent: mine ? 'flex-end':'flex-start',
                   margin:'8px 0'}}>
-      <div style=${{maxWidth:'78%', padding:'9px 13px', borderRadius:'13px',
+      <div style=${{maxWidth:'80%', padding:'9px 13px', borderRadius:'13px',
                     background: mine ? 'var(--accent)' : 'var(--bg)',
                     color: mine ? '#fff' : 'var(--ink)',
-                    border: mine ? 'none' : '1px solid var(--line)'}}>
+                    border: mine ? 'none' : `1px solid ${border}`}}>
         <div>${children}</div>
         ${meta ? html`<div style=${{marginTop:'6px', fontSize:'11px', opacity:.75}}>${meta}</div>` : null}
       </div>
     </div>`;
 }
 
-function Demo({caps, reload}) {
-  const [intent, setIntent] = useState(INTENTS[0].key);
-  const [member, setMember] = useState('12345');
-  const [account, setAccount] = useState('Savings');
+function Assistant({caps, reload}) {
+  const [chosen, setChosen] = useState('');
+  const [args, setArgs] = useState({});
+  const [other, setOther] = useState('');
   const [log, setLog] = useState([]);
   const [busy, setBusy] = useState(false);
   const [learning, setLearning] = useState(null);
 
-  const chosen = INTENTS.find(i => i.key === intent);
-  const known = caps.find(c => c.id === chosen.capability);
+  const selected = caps.find(c => c.id === chosen) || caps[0];
   const say = (entry) => setLog(l => [...l, entry]);
 
-  // Poll a discovery run and narrate it, then replay once it lands.
+  // Switching capability clears the values - carrying a member number across from a
+  // different request is exactly the kind of quiet mistake this form should not make.
+  useEffect(() => { setArgs({}); }, [selected && selected.id]);
+
+  const missingArgs = () => (selected ? (selected.inputs || []) : [])
+    .filter(p => p.required && !(args[p.name] || '').trim())
+    .map(p => p.name);
+
+  // Narrate a discovery run while it works, then answer with what it learned.
   useEffect(() => {
     if (!learning) return;
     const timer = setInterval(async () => {
       const s = await api.get(`/api/discover/${learning.run_id}`);
       const turns = (s.events||[]).filter(e => e.kind === 'acted').length;
       setLearning(l => l && ({...l, turns, events: s.events || []}));
-      if (s.done) {
-        clearInterval(timer);
-        setLearning(null);
-        reload();
-        if (s.ok) {
-          say({who:'bot', text:`Learned it. That took ${turns} steps on screen — I only ever have to do that once.`});
-          runReplay(true);
-        } else {
-          say({who:'bot', text:`I could not work that out on my own: ${s.error}`});
-          setBusy(false);
-        }
+      if (!s.done) return;
+      clearInterval(timer);
+      const {capability_id, args} = learning;
+      setLearning(null);
+      reload();
+      if (s.ok) {
+        say({who:'bot', text:`Worked it out — ${turns} steps on screen. Saved as a capability, so it is in the list now and this question is a replay from here on.`});
+        answerWith(capability_id, args);
+      } else {
+        say({who:'bot', tone:'unsure',
+             text:`I could not work that out on my own, so I would rather not answer. ${s.error}`});
+        setBusy(false);
       }
     }, 3000);
     return () => clearInterval(timer);
   }, [learning && learning.run_id]);
 
-  const runReplay = async (afterLearning) => {
+  const answerWith = async (capability_id, args) => {
     const started = performance.now();
-    const r = await api.post('/api/replay', {
-      capability_id: chosen.capability,
-      args: {member_id: member, account_type: account},
-    });
+    const r = await api.post('/api/replay', {capability_id, args});
     const secs = ((performance.now() - started)/1000).toFixed(1);
     setBusy(false);
     reload();
 
-    if (r.error && !r.outcome) return say({who:'bot', text:r.error});
+    if (r.error && !r.outcome)
+      return say({who:'bot', tone:'unsure', text:r.error});
+
     if (r.outcome === 'business_outcome')
-      return say({who:'bot', text:`No member matches ${member}. That is an answer, not a fault — the capability reports it by name as “${r.business_outcome}”.`,
-                  meta:`${secs}s · no model consulted`});
+      return say({who:'bot',
+        text:`${r.business_detail} Reported by name as “${r.business_outcome}”, so it is an answer rather than a fault.`,
+        meta:`${secs}s · no model consulted`});
+
     if (r.outcome === 'success' || r.outcome === 'recovered') {
+      const outs = Object.entries(r.outputs || {});
       const bits = [`${secs}s`, 'no model consulted', `${r.capability_id} v${r.version}`];
       if ((r.recoveries||[]).length) bits.push(`recovered from ${r.recoveries.join(', ')}`);
       if ((r.weak_steps||[]).length) bits.push(`weak steps ${r.weak_steps.join(', ')}`);
-      return say({who:'bot', text: chosen.answer(r.outputs || {}), meta: bits.join(' · ')});
+      return say({who:'bot', tone:'answer', meta:bits.join(' · '),
+        children: html`<div>
+          ${outs.map(([k,v]) => html`<div key=${k}>
+            <span style=${{opacity:.7}}>${k.replace(/_/g,' ')}:</span> <b>${v}</b></div>`)}
+        </div>`});
     }
-    return say({who:'bot',
-                text:`I could not complete that: ${r.error || r.outcome}.`,
-                meta:`${secs}s · evidence saved`});
+
+    return say({who:'bot', tone:'unsure',
+      text:`I could not complete that: ${r.error || r.outcome}.`,
+      meta:`${secs}s · evidence saved`});
+  };
+
+  // Only values the operator actually typed. An example recorded at discovery time is
+  // never substituted: doing so would run the capability against whatever record it was
+  // recorded from rather than the one being asked about, and the answer would read
+  // perfectly plausibly while being about somebody else's account.
+
+  const askFreeText = async (q) => {
+    const route = await api.post('/api/ask', {question: q});
+    if (route.error) { say({who:'bot', tone:'unsure', text:route.error}); setBusy(false); return; }
+
+    if (route.can_answer) {
+      say({who:'bot', text:'I know how to do that.',
+           meta:`matched ${route.capability_id} · ${route.confidence} confidence`});
+      return answerWith(route.capability_id, route.arguments);
+    }
+    // Matched, but the question left something out. Never invent it - an invented
+    // member number is a lookup of somebody else's account.
+    if (route.capability_id && route.missing.length) {
+      say({who:'bot', tone:'unsure',
+           text:`I can do that, but you have not told me: ${route.missing.join(', ')}. I would rather ask than guess.`});
+      setBusy(false); return;
+    }
+    if (route.capability_id) {
+      say({who:'bot', tone:'unsure',
+           text:`I am not confident enough to answer that. ${route.reasoning}`,
+           meta:`closest match ${route.capability_id} · ${route.confidence} confidence`});
+      setBusy(false); return;
+    }
+    if (!route.goal) {
+      say({who:'bot', tone:'unsure',
+           text:`I do not have a capability for that, and I could not work out what it would involve. ${route.reasoning}`});
+      setBusy(false); return;
+    }
+    say({who:'bot',
+         text:'I have not done that here before. Let me work it out by using the application — this takes a while, and only has to happen once.',
+         meta:`will record as ${route.suggested_id}`});
+    const started = await api.post('/api/discover', {
+      capability_id: route.suggested_id,
+      url: (selected && selected.entry_url) || 'http://127.0.0.1:8080/meridian/',
+      goal: route.goal, params: route.arguments, max_steps: 10,
+    });
+    if (started.error) { say({who:'bot', tone:'unsure', text:started.error}); setBusy(false); return; }
+    setLearning({run_id: started.run_id, capability_id: route.suggested_id,
+                 args: route.arguments, turns: 0, events: []});
   };
 
   const ask = async () => {
+    const typed = other.trim();
     setBusy(true);
-    say({who:'you', text:`${chosen.label} — member ${member}, ${account}`});
-    if (known) {
-      say({who:'bot', text:'I know how to do that already. One moment.'});
-      return runReplay(false);
+    if (typed) {                       // the escape hatch takes precedence
+      say({who:'you', text:typed});
+      setOther('');
+      return askFreeText(typed);
     }
-    say({who:'bot', text:'I have never done that here before. Let me work it out by using the application, and I will remember it.'});
-    const started = await api.post('/api/discover', {
-      capability_id: chosen.capability, url: chosen.entry, goal: chosen.goal,
-      params: chosen.record, describe: chosen.describe, max_steps: 10,
-    });
-    if (started.error) { say({who:'bot', text:started.error}); setBusy(false); return; }
-    setLearning({run_id: started.run_id, turns: 0, events: []});
+    if (!selected) {
+      say({who:'bot', tone:'unsure',
+           text:'Nothing is recorded yet — type what you need below and I will learn it.'});
+      setBusy(false); return;
+    }
+    const gaps = missingArgs();
+    if (gaps.length) {
+      say({who:'bot', tone:'unsure',
+           text:`I need ${gaps.join(' and ')} before I can run that. I will not fill it in from the value it was recorded with — that would answer about a different account.`});
+      setBusy(false); return;
+    }
+    const supplied = Object.fromEntries(
+      (selected.inputs || []).map(p => [p.name, (args[p.name] || '').trim()]));
+    say({who:'you', text:`${selected.description} — ` +
+         Object.entries(supplied).map(([k,v]) => `${k} ${v}`).join(', ')});
+    say({who:'bot', text:'I know how to do that.'});
+    return answerWith(selected.id, supplied);
   };
 
   return html`
@@ -457,28 +512,43 @@ function Demo({caps, reload}) {
         <h2>Ask</h2>
         <div class="body">
           <label>Request</label>
-          <select value=${intent} onChange=${e => setIntent(e.target.value)}>
-            ${INTENTS.map(i => html`<option key=${i.key} value=${i.key}>${i.label}</option>`)}
+          <select value=${selected ? selected.id : ''} onChange=${e => setChosen(e.target.value)}>
+            ${caps.length
+              ? caps.map(c => html`<option key=${c.id} value=${c.id}>${c.description}</option>`)
+              : html`<option value="">nothing recorded yet</option>`}
           </select>
-          <div style=${{height:'10px'}}></div>
-          <label>Member</label>
-          <select value=${member} onChange=${e => setMember(e.target.value)}>
-            ${MEMBERS.map(m => html`<option key=${m} value=${m}>${m}${m==='99999'?' (no such member)':''}</option>`)}
-          </select>
-          <div style=${{height:'10px'}}></div>
-          <label>Account</label>
-          <select value=${account} onChange=${e => setAccount(e.target.value)}>
-            ${ACCOUNTS.map(a => html`<option key=${a} value=${a}>${a}</option>`)}
-          </select>
-          <div style=${{height:'14px'}}></div>
-          <button class="go" disabled=${busy} onClick=${ask}>
-            ${busy ? html`<span class="spin"></span>` : null}${busy ? 'Working…' : 'Ask'}
-          </button>
-          <div class="note" style=${{marginTop:'12px'}}>
-            ${known
-              ? html`A capability is recorded for this — it replays with no model.`
-              : html`Nothing recorded for this yet. The first ask drives the application
-                     with a model and can take many minutes; every ask after that replays.`}
+
+          ${selected ? (selected.inputs || []).map(p => html`
+            <div key=${p.name} style=${{marginTop:'10px'}}>
+              <label>${p.name.replace(/_/g,' ')}${p.required ? '' : ' (optional)'}</label>
+              ${p.enum_values && p.enum_values.length
+                ? html`<select value=${args[p.name] || ''}
+                         onChange=${e => setArgs({...args, [p.name]: e.target.value})}>
+                    <option value="">— choose —</option>
+                    ${p.enum_values.map(v => html`<option key=${v} value=${v}>${v}</option>`)}
+                  </select>`
+                : html`<input value=${args[p.name] || ''} placeholder=${p.example ? `e.g. ${p.example}` : ''}
+                         onChange=${e => setArgs({...args, [p.name]: e.target.value})} />`}
+              <div class="note" style=${{marginTop:'3px'}}>${p.description}</div>
+            </div>`) : null}
+
+          <div style=${{height:'16px', borderTop:'1px solid var(--line)', margin:'14px 0 0'}}></div>
+          <label>Not in the list? Ask for it</label>
+          <textarea rows="2" value=${other}
+            placeholder="e.g. is member 12345's debit card locked?"
+            onChange=${e => setOther(e.target.value)}
+            style=${{width:'100%',padding:'8px 10px',border:'1px solid var(--line)',
+                     borderRadius:'7px',background:'var(--bg)',color:'var(--ink)',
+                     font:'inherit',fontSize:'13px',resize:'vertical'}}></textarea>
+          <div class="note" style=${{marginTop:'5px'}}>
+            Used instead of the selections above. If nothing recorded answers it, I will
+            drive the application once to learn it and add it to the list.
+          </div>
+
+          <div style=${{marginTop:'14px'}}>
+            <button class="go" disabled=${busy} onClick=${ask}>
+              ${busy ? html`<span class="spin"></span>` : null}${busy ? 'Working…' : 'Ask'}
+            </button>
           </div>
         </div>
       </div>
@@ -487,16 +557,19 @@ function Demo({caps, reload}) {
         <h2>Assistant</h2>
         <div class="body">
           ${log.length ? null : html`<div class="note">
-            Pick a request and ask. The first time, the system has to learn the flow by
-            using the application. After that the same request is a replay — same steps,
-            no model, seconds instead of minutes.</div>`}
-          ${log.map((m,i) => html`<${Bubble} key=${i} who=${m.who} meta=${m.meta}>${m.text}<//>`)}
+            Pick a request and ask — a recorded capability answers in seconds with no
+            model involved. For anything not in the list, type it below the selections
+            and I will work it out once, then remember it.</div>`}
+          ${log.map((m,i) => html`
+            <${Bubble} key=${i} who=${m.who} meta=${m.meta} tone=${m.tone}>
+              ${m.children || m.text}
+            <//>`)}
           ${learning ? html`
             <div class="out" style=${{marginTop:'10px'}}>
-              <div><span class="spin"></span>Working it out on screen — ${learning.turns} steps so far</div>
+              <div><span class="spin"></span>Using the application — ${learning.turns} steps so far</div>
               <div class="note" style=${{marginTop:'8px'}}>
                 ${(learning.events||[]).slice(-4).map((e,i) => html`
-                  <div key=${i}>${e.kind} · ${(e.message||'').slice(0,72)}</div>`)}
+                  <div key=${i}>${e.kind} · ${(e.message||'').slice(0,70)}</div>`)}
               </div>
             </div>` : null}
         </div>
@@ -531,7 +604,7 @@ function App() {
           <button key=${k} data-on=${tab===k} onClick=${() => setTab(k)}>${l}</button>`)}</nav>
       </header>
       <main class=${tab === 'interventions' ? 'single' : ''}>
-        ${tab === 'demo' ? html`<${Demo} caps=${caps} reload=${reload} />` : null}
+        ${tab === 'demo' ? html`<${Assistant} caps=${caps} reload=${reload} />` : null}
         ${tab === 'capabilities' ? html`<${Capabilities} caps=${caps} reload=${reload} />` : null}
         ${tab === 'runs' ? html`<${Runs} runs=${runs} />` : null}
         ${tab === 'interventions' ? html`<${Interventions} items=${ivs} reload=${reload} />` : null}
