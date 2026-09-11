@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T031754-d81710",
+  "kind": "replay",
+  "outcome": "hard_failure",
+  "duration_ms": 2186,
+  "events": 9,
+  "summary": "hard_failure at step 4: step 4 (I will read the balance of the Savings account from the table.) did not complete\n  expected: the read to succeed\n  observed: could not locate 'I will read the balance of the Savings account from the table.'",
+  "weak_steps": []
+}
