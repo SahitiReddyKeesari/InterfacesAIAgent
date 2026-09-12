@@ -203,6 +203,27 @@ def _discovery_status(state: ConsoleState, run_id: str) -> dict[str, Any]:
     return record
 
 
+def _busy(state: ConsoleState) -> dict[str, Any]:
+    """Whether a run holds the browser, and what it has managed so far.
+
+    "Something is running" is not useful on its own: a discovery run can take twenty
+    minutes, and a caller who cannot see progress cannot tell it apart from a hang.
+    """
+    live = {"busy": state.busy, "run_id": None, "kind": None, "steps": 0, "last": ""}
+    if not state.busy:
+        return live
+    recent = [r for r in state.discoveries.values() if not r["done"]]
+    if recent:
+        record = recent[-1]
+        events = _run_detail(state, record["run_id"]).get("events", [])
+        live.update(run_id=record["run_id"], kind="discovery",
+                    steps=sum(1 for e in events if e["kind"] == "acted"),
+                    last=(events[-1]["message"] if events else "")[:90])
+    else:
+        live.update(kind="replay")
+    return live
+
+
 def _runs(state: ConsoleState) -> list[dict[str, Any]]:
     out = []
     for directory in sorted(state.evidence.glob("*-*"), reverse=True):
@@ -246,7 +267,7 @@ def build_routes(state: ConsoleState) -> dict[str, Callable[[dict], Any]]:
         "POST /api/discover":
             lambda body: _start_discovery(state, body),
         "GET /api/busy":
-            lambda _: {"busy": state.busy},
+            lambda _: _busy(state),
         "GET /api/runs":
             lambda _: _runs(state),
         "GET /api/interventions":

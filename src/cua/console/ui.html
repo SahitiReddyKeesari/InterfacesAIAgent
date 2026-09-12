@@ -440,6 +440,7 @@ function Assistant({caps, reload}) {
   // perfectly plausibly while being about somebody else's account.
 
   const askFreeText = async (q) => {
+    say({who:'bot', text:'Working out which capability answers that…'});
     const route = await api.post('/api/ask', {question: q});
     if (route.error) { say({who:'bot', tone:'unsure', text:route.error}); setBusy(false); return; }
 
@@ -474,7 +475,11 @@ function Assistant({caps, reload}) {
       url: (selected && selected.entry_url) || 'http://127.0.0.1:8080/meridian/',
       goal: route.goal, params: route.arguments, max_steps: 10,
     });
-    if (started.error) { say({who:'bot', tone:'unsure', text:started.error}); setBusy(false); return; }
+    if (started.error) {
+      say({who:'bot', tone:'unsure',
+           text:`${started.error}. One browser drives one application at a time — watch the banner above for what it is doing, or restart the console to stop it.`});
+      setBusy(false); return;
+    }
     setLearning({run_id: started.run_id, capability_id: route.suggested_id,
                  args: route.arguments, turns: 0, events: []});
   };
@@ -583,11 +588,13 @@ function App() {
   const [caps, setCaps] = useState([]);
   const [runs, setRuns] = useState([]);
   const [ivs, setIvs] = useState([]);
+  const [live, setLive] = useState({busy:false});
 
   const reload = useCallback(() => {
     api.get('/api/capabilities').then(setCaps);
     api.get('/api/runs').then(setRuns);
     api.get('/api/interventions').then(setIvs);
+    api.get('/api/busy').then(setLive);
   }, []);
   useEffect(() => { reload(); const t = setInterval(reload, 4000); return () => clearInterval(t); },
             [reload]);
@@ -603,6 +610,14 @@ function App() {
         <nav>${tabs.map(([k,l]) => html`
           <button key=${k} data-on=${tab===k} onClick=${() => setTab(k)}>${l}</button>`)}</nav>
       </header>
+      ${live.busy ? html`
+        <div style=${{padding:'9px 20px', background:'color-mix(in srgb,var(--accent) 12%,transparent)',
+                      borderBottom:'1px solid var(--line)', fontSize:'13px'}}>
+          <span class="spin"></span>
+          A ${live.kind || 'run'} is using the browser${live.steps ? ` — ${live.steps} steps so far` : ''}.
+          New requests wait for it.
+          ${live.last ? html`<span class="note"> · ${live.last}</span>` : null}
+        </div>` : null}
       <main class=${tab === 'interventions' ? 'single' : ''}>
         ${tab === 'demo' ? html`<${Assistant} caps=${caps} reload=${reload} />` : null}
         ${tab === 'capabilities' ? html`<${Capabilities} caps=${caps} reload=${reload} />` : null}
