@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T041126-f029e4",
+  "kind": "replay",
+  "outcome": "success",
+  "duration_ms": 2846,
+  "events": 10,
+  "summary": "success: current_balance=1290.03, status=Open",
+  "weak_steps": []
+}

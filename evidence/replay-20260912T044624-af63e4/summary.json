@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260912T044624-af63e4",
+  "kind": "replay",
+  "outcome": "business_outcome",
+  "duration_ms": 2098,
+  "events": 8,
+  "summary": "business outcome 'member_not_found': No member matches the supplied number.",
+  "weak_steps": []
+}

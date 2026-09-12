@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260912T044621-bd8030",
+  "kind": "replay",
+  "outcome": "success",
+  "duration_ms": 2580,
+  "events": 10,
+  "summary": "success: current_balance=25000.00, status=Matured",
+  "weak_steps": []
+}

@@ -1,0 +1,213 @@
+{
+  "schema_version": "1.0",
+  "id": "meridian.check_card_lock_status",
+  "version": 1,
+  "name": "meridian check card lock status",
+  "description": "Check the card lock status for member 12345.",
+  "surface": {
+    "kind": "web",
+    "entry_url": "http://127.0.0.1:8080/meridian/",
+    "tenant": null,
+    "variant": null
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "name": "status",
+      "type": "string",
+      "description": "I need to read the card status for the first card to check if it is locked or active.",
+      "sensitive": false,
+      "source_step": 4
+    }
+  ],
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the application.",
+      "action": {
+        "kind": "navigate",
+        "url": "http://127.0.0.1:8080/meridian/"
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 1,
+      "intent": "Click on Card Services to navigate to the card management section.",
+      "action": {
+        "kind": "click",
+        "locator": {
+          "description": "Click on Card Services to navigate to the card management section.",
+          "role": "link",
+          "frame_path": [
+            "nav"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "role_name",
+              "value": "link:Card Services",
+              "confidence": 0.92,
+              "rationale": "role plus accessible name; survives markup changes and has a direct equivalent on desktop accessibility APIs"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "link:3",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        }
+      },
+      "checkpoint": {
+        "description": "After: Click on Card Services to navigate to the card management section.",
+        "text_present": [
+          "Card Services"
+        ],
+        "text_absent": [],
+        "locator_present": []
+      },
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 2,
+      "intent": "I need to enter the member number 12345 into the Member / Name textbox to retrieve their cards.",
+      "action": {
+        "kind": "fill",
+        "locator": {
+          "description": "I need to enter the member number 12345 into the Member / Name textbox to retrie",
+          "role": "textbox",
+          "frame_path": [
+            "main"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "label_text",
+              "value": "Member / Name:",
+              "confidence": 0.85,
+              "rationale": "caption in the adjacent table cell; this page associates no <label for> with its controls, so this is the field's only human-meaningful anchor"
+            },
+            {
+              "strategy": "control_id",
+              "value": "ctl00_ContentPlaceHolder1_txtCardMember",
+              "confidence": 0.35,
+              "rationale": "identifies a position, not a control: a segment of the id is an index; treated as positional until peers prove otherwise, which errs towards distrusting an id rather than towards selecting the wrong record; it will select the wrong record as soon as the list reorders"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "textbox:0",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        },
+        "text": "12345",
+        "secret": false
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 3,
+      "intent": "I need to click the Retrieve Cards link to view the member's cards.",
+      "action": {
+        "kind": "click",
+        "locator": {
+          "description": "I need to click the Retrieve Cards link to view the member's cards.",
+          "role": "link",
+          "frame_path": [
+            "main"
+          ],
+          "scope": null,
+          "candidates": [
+            {
+              "strategy": "role_name",
+              "value": "link:Retrieve Cards",
+              "confidence": 0.92,
+              "rationale": "role plus accessible name; survives markup changes and has a direct equivalent on desktop accessibility APIs"
+            },
+            {
+              "strategy": "control_id",
+              "value": "ctl00_ContentPlaceHolder1_btnCardSearch",
+              "confidence": 0.35,
+              "rationale": "identifies a position, not a control: a segment of the id is an index; treated as positional until peers prove otherwise, which errs towards distrusting an id rather than towards selecting the wrong record; it will select the wrong record as soon as the list reorders"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "link:0",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        }
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    },
+    {
+      "index": 4,
+      "intent": "I need to read the card status for the first card to check if it is locked or active.",
+      "action": {
+        "kind": "read",
+        "locator": {
+          "description": "I need to read the card status for the first card to check if it is locked or ac",
+          "role": "cell",
+          "frame_path": [
+            "main"
+          ],
+          "scope": {
+            "contains_text": "**** **** **** 4412",
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
+          },
+          "candidates": [
+            {
+              "strategy": "column_cell",
+              "value": "Status",
+              "confidence": 0.88,
+              "rationale": "cell identified by its column heading; combined with a row scope this names the value rather than its coordinates, and column headings exist on desktop grids too"
+            },
+            {
+              "strategy": "ordinal",
+              "value": "cell:11",
+              "confidence": 0.15,
+              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
+            }
+          ]
+        },
+        "output": "status"
+      },
+      "checkpoint": null,
+      "risk": "safe",
+      "optional": false,
+      "notes": ""
+    }
+  ],
+  "success": {
+    "description": "Card Services",
+    "text_present": [
+      "Card Services"
+    ],
+    "text_absent": [],
+    "locator_present": []
+  },
+  "known_outcomes": [],
+  "recoverable": [],
+  "approval": "draft",
+  "provenance": {
+    "recorded_at": "2026-09-11T04:22:50.049088Z",
+    "goal": "Check the card lock status for member 12345.",
+    "model": "gemini-flash-lite-latest",
+    "run_id": "discovery-20260911T041328-ba8f5e",
+    "discovery_steps": 5,
+    "weakest_locator": 0.85
+  }
+}

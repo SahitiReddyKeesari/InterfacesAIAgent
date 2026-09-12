@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260912T044627-3d4dfd",
+  "kind": "replay",
+  "outcome": "business_outcome",
+  "duration_ms": 2500,
+  "events": 9,
+  "summary": "business outcome 'ambiguous_request': 2 records matched the value given for step 4; it does not identify one record. Supply a value that names a single record - an account number rather than a product type.",
+  "weak_steps": []
+}

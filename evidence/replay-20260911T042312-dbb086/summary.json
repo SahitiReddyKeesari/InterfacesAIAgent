@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260911T042312-dbb086",
+  "kind": "replay",
+  "outcome": "success",
+  "duration_ms": 3255,
+  "events": 10,
+  "summary": "success: status=Active",
+  "weak_steps": []
+}

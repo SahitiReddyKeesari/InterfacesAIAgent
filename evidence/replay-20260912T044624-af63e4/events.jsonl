@@ -1,0 +1,8 @@
+{"seq": 1, "at": "2026-09-12T04:46:24.904+00:00", "elapsed_ms": 0, "kind": "run_started", "message": "replay run replay-20260912T044624-af63e4"}
+{"seq": 2, "at": "2026-09-12T04:46:24.904+00:00", "elapsed_ms": 0, "kind": "bound", "message": "meridian.read_savings_balance v3", "fingerprint": "ce07e497dfdff894", "arguments": ["account_type", "member_id"], "inputs_redacted": 0}
+{"seq": 3, "at": "2026-09-12T04:46:25.253+00:00", "elapsed_ms": 349, "kind": "step", "message": "Open the application.", "step": 0, "action": "navigate", "ok": true, "strategy": null, "confidence": 0.0}
+{"seq": 4, "at": "2026-09-12T04:46:25.937+00:00", "elapsed_ms": 1032, "kind": "step", "message": "I will enter the member ID into the Member / Name textbox to begin the lookup.", "step": 1, "action": "fill", "ok": true, "strategy": "label_text", "confidence": 0.85}
+{"seq": 5, "at": "2026-09-12T04:46:26.320+00:00", "elapsed_ms": 1416, "kind": "step", "message": "I will click the Search link to perform the member lookup with the entered member ID.", "step": 2, "action": "click", "ok": true, "strategy": "role_name", "confidence": 0.92}
+{"seq": 6, "at": "2026-09-12T04:46:26.336+00:00", "elapsed_ms": 1432, "kind": "step", "message": "I will click the Select link for member 12345 to view their account details.", "step": 3, "action": "click", "ok": false, "strategy": null, "confidence": 0.0}
+{"seq": 7, "at": "2026-09-12T04:46:27.001+00:00", "elapsed_ms": 2097, "kind": "business_outcome", "message": "No member matches the supplied number.", "name": "member_not_found", "step": 3}
+{"seq": 8, "at": "2026-09-12T04:46:27.002+00:00", "elapsed_ms": 2098, "kind": "run_finished", "message": "business_outcome", "outcome": "business_outcome"}

@@ -1,0 +1,61 @@
+{
+  "outcome": "business_outcome",
+  "capability_id": "meridian.read_savings_balance",
+  "version": 3,
+  "fingerprint": "ce07e497dfdff894",
+  "outputs": {},
+  "business_outcome": "member_not_found",
+  "business_detail": "No member matches the supplied number.",
+  "recoveries": [],
+  "escalations": [],
+  "human_changes": [],
+  "failed_step": null,
+  "expected": "",
+  "observed": "",
+  "error": "",
+  "steps": [
+    {
+      "index": 0,
+      "intent": "Open the application.",
+      "action": "navigate",
+      "ok": true,
+      "strategy": null,
+      "confidence": 0.0,
+      "checkpoint_passed": null,
+      "detail": "navigated to http://127.0.0.1:8080/meridian/"
+    },
+    {
+      "index": 1,
+      "intent": "I will enter the member ID into the Member / Name textbox to begin the lookup.",
+      "action": "fill",
+      "ok": true,
+      "strategy": "label_text",
+      "confidence": 0.85,
+      "checkpoint_passed": null,
+      "detail": "fill via label_text"
+    },
+    {
+      "index": 2,
+      "intent": "I will click the Search link to perform the member lookup with the entered member ID.",
+      "action": "click",
+      "ok": true,
+      "strategy": "role_name",
+      "confidence": 0.92,
+      "checkpoint_passed": null,
+      "detail": "click via role_name"
+    },
+    {
+      "index": 3,
+      "intent": "I will click the Select link for member 12345 to view their account details.",
+      "action": "click",
+      "ok": false,
+      "strategy": null,
+      "confidence": 0.0,
+      "checkpoint_passed": null,
+      "detail": "could not locate 'I will click the Select link for member 12345 to view their account details.': no record matching '99999' is present"
+    }
+  ],
+  "run_id": "replay-20260912T044624-af63e4",
+  "evidence_dir": "/Users/sahitikeesari/Desktop/AssignmentInterfaces/InterfacesAIAgent/evidence/replay-20260912T044624-af63e4",
+  "duration_ms": 2098
+}

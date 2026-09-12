@@ -1,0 +1,8 @@
+{
+  "run_id": "discovery-20260911T041328-ba8f5e",
+  "kind": "discovery",
+  "outcome": "success",
+  "duration_ms": 561964,
+  "events": 22,
+  "capability": "meridian.check_card_lock_status"
+}

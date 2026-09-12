@@ -1,0 +1,9 @@
+{
+  "run_id": "replay-20260912T044630-65e765",
+  "kind": "replay",
+  "outcome": "recovered",
+  "duration_ms": 6258,
+  "events": 15,
+  "summary": "recovered: current_balance=8421.55, status=Open  (recovered from session_expired)",
+  "weak_steps": []
+}
