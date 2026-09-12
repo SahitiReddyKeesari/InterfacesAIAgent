@@ -6,6 +6,7 @@ down. Tests drive it over HTTP, exactly as the automation does.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import time
@@ -31,6 +32,24 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def base_url() -> str:
+    """A running target application for the suite.
+
+    The mock lives in its own repository and is checked out here as a submodule - it is
+    a stand-in for a customer's system, not part of this one, and keeping it separate
+    makes that boundary something you can see rather than something the README asserts.
+
+    Set MOCKBANK_URL to point the suite at an instance that is already running instead.
+    """
+    existing = os.getenv("MOCKBANK_URL")
+    if existing:
+        return existing.rstrip("/")
+
+    if not RUN_SH.exists():
+        pytest.skip(
+            "the mock application is not checked out. It lives in its own repository:\n"
+            "    git submodule update --init\n"
+            "or point the suite at a running instance with MOCKBANK_URL.")
+
     port = _free_port()
     proc = subprocess.Popen(
         ["bash", str(RUN_SH)],

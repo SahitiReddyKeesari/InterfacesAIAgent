@@ -22,11 +22,21 @@ No Homebrew, Maven, Gradle, Tomcat or Docker required.
 ## Setup
 
 ```bash
+git clone --recurse-submodules https://github.com/SahitiReddyKeesari/InterfacesAIAgent
+cd InterfacesAIAgent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 playwright install chromium
 cp .env.example .env      # then put your key in GEMINI_API_KEY
 ```
+
+Already cloned without the flag? `git submodule update --init`.
+
+The target application lives in [its own repository](https://github.com/SahitiReddyKeesari/LegacyMockBank)
+and is checked out here as a submodule. It is a stand-in for a customer's system rather
+than part of this one, and keeping it separate makes that boundary visible instead of
+merely asserted - the engine can be read without it, and nothing under `src/cua/` names
+it. Point the test suite at an instance running elsewhere with `MOCKBANK_URL`.
 
 No JDK? This installs one into your home directory, no admin rights, nothing in system
 paths:
