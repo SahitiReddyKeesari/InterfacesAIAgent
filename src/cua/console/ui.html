@@ -359,7 +359,7 @@ function Bubble({who, children, meta, tone}) {
     </div>`;
 }
 
-function Assistant({caps, reload}) {
+function Assistant({caps, reload, target}) {
   const [chosen, setChosen] = useState('');
   const [args, setArgs] = useState({});
   const [other, setOther] = useState('');
@@ -467,12 +467,17 @@ function Assistant({caps, reload}) {
            text:`I do not have a capability for that, and I could not work out what it would involve. ${route.reasoning}`});
       setBusy(false); return;
     }
+    if (!(selected && selected.entry_url) && !target) {
+      say({who:'bot', tone:'unsure',
+           text:'I have nothing recorded and no application to learn against. Start the console with --target http://host:port/path so I know what to drive.'});
+      setBusy(false); return;
+    }
     say({who:'bot',
          text:'I have not done that here before. Let me work it out by using the application — this takes a while, and only has to happen once.',
          meta:`will record as ${route.suggested_id}`});
     const started = await api.post('/api/discover', {
       capability_id: route.suggested_id,
-      url: (selected && selected.entry_url) || 'http://127.0.0.1:8080/meridian/',
+      url: (selected && selected.entry_url) || target,
       goal: route.goal, params: route.arguments, max_steps: 10,
     });
     if (started.error) {
@@ -589,12 +594,14 @@ function App() {
   const [runs, setRuns] = useState([]);
   const [ivs, setIvs] = useState([]);
   const [live, setLive] = useState({busy:false});
+  const [target, setTarget] = useState(null);
 
   const reload = useCallback(() => {
     api.get('/api/capabilities').then(setCaps);
     api.get('/api/runs').then(setRuns);
     api.get('/api/interventions').then(setIvs);
     api.get('/api/busy').then(setLive);
+    api.get('/api/config').then(c => setTarget(c.target));
   }, []);
   useEffect(() => { reload(); const t = setInterval(reload, 4000); return () => clearInterval(t); },
             [reload]);
@@ -619,7 +626,7 @@ function App() {
           ${live.last ? html`<span class="note"> · ${live.last}</span>` : null}
         </div>` : null}
       <main class=${tab === 'interventions' ? 'single' : ''}>
-        ${tab === 'demo' ? html`<${Assistant} caps=${caps} reload=${reload} />` : null}
+        ${tab === 'demo' ? html`<${Assistant} caps=${caps} reload=${reload} target=${target} />` : null}
         ${tab === 'capabilities' ? html`<${Capabilities} caps=${caps} reload=${reload} />` : null}
         ${tab === 'runs' ? html`<${Runs} runs=${runs} />` : null}
         ${tab === 'interventions' ? html`<${Interventions} items=${ivs} reload=${reload} />` : null}

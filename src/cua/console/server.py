@@ -36,10 +36,15 @@ _STOPWORDS = {"the", "a", "an", "of", "for", "and", "to", "in", "on", "is", "are
 class ConsoleState:
     """Shared state for the console: where things live, and what is running."""
 
-    def __init__(self, artifacts: Path, evidence: Path, interventions: Path):
+    def __init__(self, artifacts: Path, evidence: Path, interventions: Path,
+                 target: str | None = None):
         self.store = Store(artifacts)
         self.evidence = Path(evidence)
         self.broker = InterventionBroker(interventions)
+        # Where to record a new capability against, when no existing one implies it.
+        # Supplied by whoever starts the console; this package has no default
+        # application of its own.
+        self.target = target
         self.lock = threading.Lock()
         # One run at a time, of either kind. They drive a real browser against a real
         # application; letting a click in the UI start a second concurrent run against
@@ -99,11 +104,26 @@ def _run_replay(state: ConsoleState, body: dict) -> dict[str, Any]:
             state.busy = False
 
 
-def _suggested_id(goal: str, taken: set[str]) -> str:
+def _namespace(entry_url: str, taken: set[str]) -> str:
+    """Where a new capability's id should live.
+
+    Follows whatever the existing capabilities use, so a catalog stays coherent; failing
+    that, derives one from the host being automated. Hardcoding an application's name
+    here would put knowledge of one target into an engine that is supposed to have none.
+    """
+    prefixes = {cid.split(".", 1)[0] for cid in taken if "." in cid}
+    if len(prefixes) == 1:
+        return prefixes.pop()
+    host = urlparse(entry_url).hostname or ""
+    label = re.sub(r"[^a-z0-9]+", "_", host.lower()).strip("_")
+    return label or "capability"
+
+
+def _suggested_id(goal: str, taken: set[str], entry_url: str = "") -> str:
     """A stable, readable id for a capability the system is about to learn."""
     words = [w for w in re.split(r"[^a-z0-9]+", goal.lower()) if w
              and w not in _STOPWORDS][:4]
-    base = "meridian." + ("_".join(words) or "capability")
+    base = f"{_namespace(entry_url, taken)}." + ("_".join(words) or "capability")
     candidate, n = base, 2
     while candidate in taken:
         candidate, n = f"{base}_{n}", n + 1
@@ -132,8 +152,10 @@ def _ask(state: ConsoleState, body: dict) -> dict[str, Any]:
     payload = decision.to_dict()
     payload["question"] = question
     if decision.capability_id is None:
+        known = set(state.store.list_capabilities())
         payload["suggested_id"] = _suggested_id(
-            decision.goal or question, set(state.store.list_capabilities()))
+            decision.goal or question, known, state.target or "")
+        payload["target"] = state.target
     return payload
 
 
@@ -268,6 +290,8 @@ def build_routes(state: ConsoleState) -> dict[str, Callable[[dict], Any]]:
             lambda body: _start_discovery(state, body),
         "GET /api/busy":
             lambda _: _busy(state),
+        "GET /api/config":
+            lambda _: {"target": state.target},
         "GET /api/runs":
             lambda _: _runs(state),
         "GET /api/interventions":
@@ -356,9 +380,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(host: str = "127.0.0.1", port: int = 8765,
           artifacts: Path | None = None, evidence: Path | None = None,
-          interventions: Path | None = None) -> ThreadingHTTPServer:
+          interventions: Path | None = None,
+          target: str | None = None) -> ThreadingHTTPServer:
     state = ConsoleState(artifacts or ARTIFACTS, evidence or EVIDENCE,
-                         interventions or INTERVENTIONS)
+                         interventions or INTERVENTIONS, target)
     handler = type("BoundHandler", (Handler,),
                    {"state": state, "routes": build_routes(state)})
     return ThreadingHTTPServer((host, port), handler)

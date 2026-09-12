@@ -238,6 +238,9 @@ def probe(
 def console(
     host: str = typer.Option("127.0.0.1"),
     port: int = typer.Option(8765),
+    target: Optional[str] = typer.Option(
+        None, help="Entry point of the application to record against when nothing is "
+                   "recorded yet, e.g. http://host:port/app/"),
     artifacts: Optional[Path] = typer.Option(None),
     evidence: Optional[Path] = typer.Option(None),
 ) -> None:
@@ -251,7 +254,7 @@ def console(
 
     load_dotenv()
     server = serve(host, port, artifacts or ARTIFACTS, evidence or EVIDENCE,
-                   INTERVENTIONS)
+                   INTERVENTIONS, target)
     typer.echo(f"console on http://{host}:{port}   (ctrl-c to stop)")
     try:
         server.serve_forever()
