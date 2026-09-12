@@ -285,7 +285,10 @@ def test_an_unmatched_question_yields_a_goal_and_an_id_to_learn_it_under(
     _, r = post(console, "/api/ask", {"question": "is member 12345's card locked?"})
     assert r["capability_id"] is None
     assert r["goal"].startswith("Look up a member")
-    assert r["suggested_id"].startswith("meridian.")
+    # Namespaced and derived, never a name this package carries. Which namespace it
+    # picks depends on what the catalog already looks like - see the unit test below.
+    assert "." in r["suggested_id"]
+    assert r["suggested_id"] not in [c["id"] for c in get(console, "/api/capabilities")[1]]
 
 
 def test_the_router_is_shown_the_capabilities_it_may_choose_from(console, monkeypatch):
@@ -316,3 +319,22 @@ def test_an_incomplete_call_executes_nothing(console, srv):
     assert "contract" in result["error"]
     assert result["steps"] == [], "no step may run on an incomplete call"
     assert result["outputs"] == {}
+
+
+def test_a_new_capability_id_follows_the_catalog_rather_than_a_built_in_name(console):
+    """The engine must not carry one application's name. A new id takes its namespace
+    from the capabilities already saved, or from the host being automated."""
+    from cua.console.server import _suggested_id
+
+    # Follows an existing catalog.
+    assert _suggested_id("lock a card", {"acme.read_balance"}, "").startswith("acme.")
+    # Otherwise derives one from the host.
+    assert _suggested_id("lock a card", set(), "http://core.example.test:9000/app/") \
+        .startswith("core_example_test.")
+    # And never invents an application when it knows nothing.
+    assert _suggested_id("lock a card", set(), "").startswith("capability.")
+
+
+def test_the_console_reports_the_target_it_was_given(console):
+    _, config = get(console, "/api/config")
+    assert "target" in config

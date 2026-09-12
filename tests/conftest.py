@@ -18,7 +18,22 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-RUN_SH = REPO / "mock" / "run.sh"
+
+# The target application is a separate project - it stands in for a customer's system
+# rather than being part of this one. Looked for in the usual places, in order; set
+# MOCKBANK_URL to use an instance that is already running instead.
+MOCK_CANDIDATES = (
+    REPO.parent / "LegacyMockBank" / "run.sh",   # cloned alongside this repo
+    REPO / "mock" / "run.sh",                    # cloned inside it
+)
+
+
+def _mock_runner() -> Path | None:
+    override = os.getenv("MOCKBANK_HOME")
+    if override:
+        candidate = Path(override) / "run.sh"
+        return candidate if candidate.exists() else None
+    return next((p for p in MOCK_CANDIDATES if p.exists()), None)
 
 P = "ctl00$ContentPlaceHolder1$"
 TOKEN_FIELD = "org.apache.struts.taglib.html.TOKEN"
@@ -34,25 +49,26 @@ def _free_port() -> int:
 def base_url() -> str:
     """A running target application for the suite.
 
-    The mock lives in its own repository and is checked out here as a submodule - it is
-    a stand-in for a customer's system, not part of this one, and keeping it separate
-    makes that boundary something you can see rather than something the README asserts.
-
-    Set MOCKBANK_URL to point the suite at an instance that is already running instead.
+    The application under automation lives in its own repository. That separation is the
+    point: it stands in for a customer's system, so the engine must never need it to be
+    present, and "this code knows nothing about any particular application" becomes
+    something you can check rather than something the README asserts.
     """
     existing = os.getenv("MOCKBANK_URL")
     if existing:
         return existing.rstrip("/")
 
-    if not RUN_SH.exists():
+    runner = _mock_runner()
+    if runner is None:
         pytest.skip(
-            "the mock application is not checked out. It lives in its own repository:\n"
-            "    git submodule update --init\n"
-            "or point the suite at a running instance with MOCKBANK_URL.")
+            "no target application found. It lives in its own repository:\n"
+            "    git clone https://github.com/SahitiReddyKeesari/LegacyMockBank\n"
+            "Clone it beside this repo, or set MOCKBANK_HOME to where it lives, or "
+            "point the suite at a running instance with MOCKBANK_URL.")
 
     port = _free_port()
     proc = subprocess.Popen(
-        ["bash", str(RUN_SH)],
+        ["bash", str(runner)],
         env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home()),
              "MOCKBANK_HOST": "127.0.0.1", "MOCKBANK_PORT": str(port)},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
