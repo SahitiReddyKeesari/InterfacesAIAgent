@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
-  "id": "meridian.read_account_balance",
-  "version": 1,
-  "name": "Read a member's account balance",
-  "description": "Look up a member in Meridian Core Servicing and return the balance and status of one of their accounts.",
+  "id": "meridian.read_savings_balance",
+  "version": 3,
+  "name": "meridian read savings balance",
+  "description": "Look up member {member_id} and report the balance and status of their {account_type} account",
   "surface": {
     "kind": "web",
     "entry_url": "http://127.0.0.1:8080/meridian/",
-    "tenant": "demo",
-    "variant": "meridian-core"
+    "tenant": null,
+    "variant": null
   },
   "inputs": [
     {
@@ -18,51 +18,40 @@
       "required": true,
       "example": "12345",
       "enum_values": null,
-      "pattern": "\\d{4,10}",
+      "pattern": null,
       "sensitive": false
     },
     {
       "name": "account_type",
-      "type": "enum",
+      "type": "string",
       "description": "Which of the member's accounts to report on.",
       "required": true,
       "example": "Savings",
-      "enum_values": [
-        "Savings",
-        "Checking",
-        "Certificate"
-      ],
+      "enum_values": null,
       "pattern": null,
       "sensitive": false
     }
   ],
   "outputs": [
     {
-      "name": "member_name",
+      "name": "current_balance",
       "type": "string",
-      "description": "Member's full name.",
+      "description": "I will read the balance of the Savings account from the table.",
       "sensitive": false,
       "source_step": 4
     },
     {
-      "name": "balance",
-      "type": "decimal",
-      "description": "Current balance of the requested account.",
+      "name": "status",
+      "type": "string",
+      "description": "I will read the status of the Savings account from the table.",
       "sensitive": false,
       "source_step": 5
-    },
-    {
-      "name": "account_status",
-      "type": "string",
-      "description": "Status of the requested account, e.g. Open.",
-      "sensitive": false,
-      "source_step": 6
     }
   ],
   "steps": [
     {
       "index": 0,
-      "intent": "Open the servicing application.",
+      "intent": "Open the application.",
       "action": {
         "kind": "navigate",
         "url": "http://127.0.0.1:8080/meridian/"
@@ -74,11 +63,11 @@
     },
     {
       "index": 1,
-      "intent": "Enter the member number to search for.",
+      "intent": "I will enter the member ID into the Member / Name textbox to begin the lookup.",
       "action": {
         "kind": "fill",
         "locator": {
-          "description": "Member / Name input",
+          "description": "I will enter the member ID into the Member / Name textbox to begin the lookup.",
           "role": "textbox",
           "frame_path": [
             "main"
@@ -94,8 +83,8 @@
             {
               "strategy": "control_id",
               "value": "ctl00_ContentPlaceHolder1_txtMemberId",
-              "confidence": 0.7,
-              "rationale": "server-generated id, stable while the control tree is unchanged, but opaque and not portable off this surface"
+              "confidence": 0.35,
+              "rationale": "identifies a position, not a control: a segment of the id is an index; treated as positional until peers prove otherwise, which errs towards distrusting an id rather than towards selecting the wrong record; it will select the wrong record as soon as the list reorders"
             },
             {
               "strategy": "ordinal",
@@ -115,11 +104,11 @@
     },
     {
       "index": 2,
-      "intent": "Run the member search.",
+      "intent": "I will click the Search link to perform the member lookup with the entered member ID.",
       "action": {
         "kind": "click",
         "locator": {
-          "description": "Search button",
+          "description": "I will click the Search link to perform the member lookup with the entered membe",
           "role": "link",
           "frame_path": [
             "main"
@@ -147,32 +136,25 @@
           ]
         }
       },
-      "checkpoint": {
-        "description": "A results grid is displayed.",
-        "text_present": [
-          "Search Results"
-        ],
-        "text_absent": [],
-        "locator_present": []
-      },
+      "checkpoint": null,
       "risk": "safe",
       "optional": false,
       "notes": ""
     },
     {
       "index": 3,
-      "intent": "Open the matching member's record.",
+      "intent": "I will click the Select link for member 12345 to view their account details.",
       "action": {
         "kind": "click",
         "locator": {
-          "description": "Select link for the requested member",
+          "description": "I will click the Select link for member 12345 to view their account details.",
           "role": "link",
           "frame_path": [
             "main"
           ],
           "scope": {
             "contains_text": "{member_id}",
-            "rationale": "pins the row by the member number it displays rather than by its position, so the step survives reordering, paging and differing result counts"
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
           },
           "candidates": [
             {
@@ -184,8 +166,8 @@
             {
               "strategy": "control_id",
               "value": "ctl00_ContentPlaceHolder1_gvResults_ctl02_lnkSelect",
-              "confidence": 0.35,
-              "rationale": "generated id embeds a row index, so it identifies a position rather than a control and breaks when the grid reorders"
+              "confidence": 0.7,
+              "rationale": "server-generated id, stable while the control tree is unchanged, but opaque and not portable off this surface"
             },
             {
               "strategy": "ordinal",
@@ -196,72 +178,25 @@
           ]
         }
       },
-      "checkpoint": {
-        "description": "The member detail screen is shown.",
-        "text_present": [
-          "Member Detail"
-        ],
-        "text_absent": [],
-        "locator_present": []
-      },
-      "risk": "safe",
-      "optional": false,
-      "notes": ""
-    },
-    {
-      "index": 4,
-      "intent": "Read the member's name for the caller.",
-      "action": {
-        "kind": "read",
-        "locator": {
-          "description": "member full name",
-          "role": "text",
-          "frame_path": [
-            "main"
-          ],
-          "scope": null,
-          "candidates": [
-            {
-              "strategy": "label_text",
-              "value": "Name:",
-              "confidence": 0.85,
-              "rationale": "caption in the adjacent table cell; this page associates no <label for> with its controls, so this is the displayed value's only human-meaningful anchor"
-            },
-            {
-              "strategy": "control_id",
-              "value": "ctl00_ContentPlaceHolder1_lblName",
-              "confidence": 0.7,
-              "rationale": "server-generated id, stable while the control tree is unchanged, but opaque and not portable off this surface"
-            },
-            {
-              "strategy": "ordinal",
-              "value": "text:0",
-              "confidence": 0.15,
-              "rationale": "position among controls of the same role in this frame; a last resort, and reaching it during replay indicates the surface moved"
-            }
-          ]
-        },
-        "output": "member_name"
-      },
       "checkpoint": null,
       "risk": "safe",
       "optional": false,
       "notes": ""
     },
     {
-      "index": 5,
-      "intent": "Read the balance of the requested account.",
+      "index": 4,
+      "intent": "I will read the balance of the Savings account from the table.",
       "action": {
         "kind": "read",
         "locator": {
-          "description": "balance of the requested account",
+          "description": "I will read the balance of the Savings account from the table.",
           "role": "cell",
           "frame_path": [
             "main"
           ],
           "scope": {
             "contains_text": "{account_type}",
-            "rationale": "pins the row by the account type it displays rather than by its position, so the step survives reordering, paging and differing result counts"
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
           },
           "candidates": [
             {
@@ -278,7 +213,7 @@
             }
           ]
         },
-        "output": "balance"
+        "output": "current_balance"
       },
       "checkpoint": null,
       "risk": "safe",
@@ -286,19 +221,19 @@
       "notes": ""
     },
     {
-      "index": 6,
-      "intent": "Read the status of the requested account.",
+      "index": 5,
+      "intent": "I will read the status of the Savings account from the table.",
       "action": {
         "kind": "read",
         "locator": {
-          "description": "status of the requested account",
+          "description": "I will read the status of the Savings account from the table.",
           "role": "cell",
           "frame_path": [
             "main"
           ],
           "scope": {
             "contains_text": "{account_type}",
-            "rationale": "pins the row by the account type it displays rather than by its position, so the step survives reordering, paging and differing result counts"
+            "rationale": "identifies the row by a value it displays rather than by its position, chosen during discovery"
           },
           "candidates": [
             {
@@ -315,7 +250,7 @@
             }
           ]
         },
-        "output": "account_status"
+        "output": "status"
       },
       "checkpoint": null,
       "risk": "safe",
@@ -324,25 +259,21 @@
     }
   ],
   "success": {
-    "description": "The member's detail screen is displayed with no error banner.",
+    "description": "Member Detail — {member_id}",
     "text_present": [
-      "Member Detail",
-      "Account Relationships"
+      "Member Detail — {member_id}"
     ],
-    "text_absent": [
-      "No member records match",
-      "Server Error"
-    ],
+    "text_absent": [],
     "locator_present": []
   },
   "known_outcomes": [
     {
       "name": "member_not_found",
-      "description": "No member matches the supplied number. A legitimate answer for the caller, not a failure of the automation.",
+      "description": "No member matches the supplied number.",
       "signature": {
-        "description": "The no-match message is shown.",
+        "description": "The application reports: No member records match the criteria entered.",
         "text_present": [
-          "No member records match"
+          "No member records match the criteria entered."
         ],
         "text_absent": [],
         "locator_present": []
@@ -374,11 +305,11 @@
   ],
   "approval": "draft",
   "provenance": {
-    "recorded_at": "2026-09-09T19:34:28.786424Z",
-    "goal": "Look up a member and read an account balance.",
-    "model": null,
-    "run_id": null,
-    "discovery_steps": 7,
+    "recorded_at": "2026-09-10T23:35:34.414770Z",
+    "goal": "Look up member 12345 and report the balance and status of their Savings account",
+    "model": "gemini-flash-lite-latest",
+    "run_id": "discovery-20260910T230923-74f996",
+    "discovery_steps": 6,
     "weakest_locator": 0.85
   }
 }
