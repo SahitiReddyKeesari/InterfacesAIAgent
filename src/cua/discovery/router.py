@@ -32,7 +32,11 @@ Rules that matter more than being helpful:
 - Only match a capability that genuinely answers the question asked. A capability that \
 returns a balance does not answer a question about a card, however similar the wording.
 - If nothing fits, set `match` to "none" and write a `goal` describing what would have \
-to be done in the application to answer it - one sentence, in the imperative.
+to be done in the application to answer it - one sentence, in the imperative. Put into \
+`arguments` every value in the question that would differ for another caller - a member \
+number, an account type, a card - named in snake_case. Those become the new \
+capability's inputs, and a capability recorded without them only ever works for the one \
+person who first asked.
 - Set `confidence` honestly. "low" is the right answer when the question is ambiguous, \
 when it could plausibly mean two different capabilities, or when you are guessing.
 - List in `missing` any argument the capability requires that the question does not \
@@ -48,8 +52,11 @@ SCHEMA: dict[str, Any] = {
                   "description": "Capability id that answers this, or \"none\"."},
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         "arguments": {"type": "string",
-                      "description": "JSON object of argument name to value, extracted "
-                                     "from the question. \"{}\" if none apply."},
+                      "description": "JSON object of name to value, extracted from the "
+                                     "question. When a capability matched, its argument "
+                                     "values. When none matched, the values that should "
+                                     "become the new capability's inputs. \"{}\" only "
+                                     "if the question truly contains no such value."},
         "missing": {"type": "string",
                     "description": "Comma-separated names of required arguments the "
                                    "question does not supply. Empty if none."},

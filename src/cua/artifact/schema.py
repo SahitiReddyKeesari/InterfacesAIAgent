@@ -269,6 +269,14 @@ class Capability(BaseModel):
         for out in self.outputs:
             if out.name not in produced:
                 problems.append(f"output {out.name!r} is declared but no step reads it")
+        literals = [s.index for s in self.steps
+                    if getattr(s.action, "text", None)
+                    and not PLACEHOLDER.search(str(getattr(s.action, "text", "")))]
+        if literals and not self.inputs:
+            problems.append(
+                f"steps {literals} type fixed values and no inputs are declared; this "
+                f"capability only works for whoever it was recorded against")
+
         risky = [s.index for s in self.steps if s.risk is RiskClass.IRREVERSIBLE]
         if risky and self.approval is ApprovalState.APPROVED and not self.known_outcomes:
             problems.append(f"steps {risky} are irreversible but no known outcomes are "
