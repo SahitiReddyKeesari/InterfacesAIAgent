@@ -14,15 +14,19 @@ gets stuck.
 | Need | Why |
 |---|---|
 | **Python 3.11+** | the automation system |
-| **JDK 17+** | the mock target application is Java (see [`mock/README.md`](mock/README.md)) |
+| **JDK 17+** | the target application is Java — see [LegacyMockBank](https://github.com/SahitiReddyKeesari/LegacyMockBank) |
 | **A Gemini API key** | discovery only — replay never calls a model |
 
 No Homebrew, Maven, Gradle, Tomcat or Docker required.
 
 ## Setup
 
+Two repositories, cloned side by side:
+
 ```bash
-git clone --recurse-submodules https://github.com/SahitiReddyKeesari/InterfacesAIAgent
+git clone https://github.com/SahitiReddyKeesari/InterfacesAIAgent
+git clone https://github.com/SahitiReddyKeesari/LegacyMockBank
+
 cd InterfacesAIAgent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
@@ -30,13 +34,14 @@ playwright install chromium
 cp .env.example .env      # then put your key in GEMINI_API_KEY
 ```
 
-Already cloned without the flag? `git submodule update --init`.
+**Why two.** The second is the application being automated. It stands in for a
+customer's system, so this one must never need it to be present - which makes "the
+engine knows nothing about any particular application" something you can check rather
+than something this README asserts. Nothing under `src/cua/` names it, and the suite
+skips with an instruction if it is absent rather than failing obscurely.
 
-The target application lives in [its own repository](https://github.com/SahitiReddyKeesari/LegacyMockBank)
-and is checked out here as a submodule. It is a stand-in for a customer's system rather
-than part of this one, and keeping it separate makes that boundary visible instead of
-merely asserted - the engine can be read without it, and nothing under `src/cua/` names
-it. Point the test suite at an instance running elsewhere with `MOCKBANK_URL`.
+The suite finds it beside this repo by default. Override with `MOCKBANK_HOME=/path/to/it`,
+or point at an instance already running with `MOCKBANK_URL=http://host:port`.
 
 No JDK? This installs one into your home directory, no admin rights, nothing in system
 paths:
@@ -54,7 +59,7 @@ and retries on the free tier's frequent `503`s.
 **1. Start the target application** (leave it running):
 
 ```bash
-bash mock/run.sh
+bash ../LegacyMockBank/run.sh
 ```
 
 Two deliberately legacy dashboards on `http://127.0.0.1:8080` — an ASP.NET WebForms
@@ -197,7 +202,6 @@ src/cua/
   escalation/   control transfer, the intervention queue, the operator seam
   evidence/     structured run records
   console/      optional browser console (vendored React, no build step)
-mock/           the target application (Java, no framework) — a declared stand-in
 artifacts/      saved capabilities
 evidence/       run records: discovery and replay
 ```
